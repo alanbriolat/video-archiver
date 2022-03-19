@@ -3,6 +3,7 @@ module github.com/alanbriolat/video-archiver
 go 1.18
 
 require (
+	github.com/gotk3/gotk3 v0.6.1
 	github.com/kkdai/youtube/v2 v2.7.10
 	github.com/schollz/progressbar/v3 v3.8.6
 	go.uber.org/zap v1.21.0
@@ -15,6 +16,7 @@ require (
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
