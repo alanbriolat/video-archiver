@@ -40,7 +40,7 @@ type application struct {
 	collectionList        *gtk.ListBox
 	collectionContextMenu *gtk.Menu
 	downloadListView      *gtk.TreeView
-	downloadListModel     *gtk.ListStore
+	downloadListStore     *gtk.ListStore
 }
 
 func newApplication() (*application, error) {
@@ -94,14 +94,7 @@ func (a *application) onActivate() {
 	})
 
 	a.downloadListView = expectResult(a.gtkBuilder.GetObject("tree_downloads")).(*gtk.TreeView)
-	urlCellRenderer := expectResult(gtk.CellRendererTextNew())
-	urlColumn := expectResult(gtk.TreeViewColumnNewWithAttribute("URL", urlCellRenderer, "text", DOWNLOAD_COLUMN_URL))
-	a.downloadListView.AppendColumn(urlColumn)
-	progressCellRenderer := expectResult(gtk.CellRendererProgressNew())
-	progressColumn := expectResult(gtk.TreeViewColumnNewWithAttribute("Progress", progressCellRenderer, "value", DOWNLOAD_COLUMN_PROGRESS))
-	a.downloadListView.AppendColumn(progressColumn)
-	a.downloadListModel = expectResult(gtk.ListStoreNew(glib.TYPE_STRING, glib.TYPE_INT))
-	a.downloadListView.SetModel(a.downloadListModel)
+	a.downloadListStore = expectResult(a.gtkBuilder.GetObject("list_store_downloads")).(*gtk.ListStore)
 
 	btnNewCollection := expectResult(a.gtkBuilder.GetObject("btn_new_collection")).(*gtk.Button)
 	btnNewCollection.Connect("clicked", func() {
@@ -129,6 +122,7 @@ func (a *application) onActivate() {
 		urlEntry := expectResult(a.gtkBuilder.GetObject("entry_new_download_url")).(*gtk.Entry)
 		url := expectResult(urlEntry.GetText())
 		a.addNewDownload(url)
+		urlEntry.SetText("")
 	})
 }
 
@@ -153,11 +147,11 @@ func (a *application) addNewDownload(url string) {
 	log.Printf("Adding %#v to %v", url, a.currentCollection)
 	a.currentCollection.downloads = append(a.currentCollection.downloads, download{url})
 	download := &a.currentCollection.downloads[len(a.currentCollection.downloads)-1]
-	download.appendToListStore(a.downloadListModel)
+	download.appendToListStore(a.downloadListStore)
 }
 
 func (a *application) setCurrentCollection(index int) {
-	a.downloadListModel.Clear()
+	a.downloadListStore.Clear()
 	if index < 0 {
 		a.currentCollection = nil
 		a.collectionList.UnselectAll()
@@ -168,7 +162,7 @@ func (a *application) setCurrentCollection(index int) {
 			a.collectionList.SelectRow(a.collectionList.GetRowAtIndex(index))
 		}
 		for _, download := range a.currentCollection.downloads {
-			download.appendToListStore(a.downloadListModel)
+			download.appendToListStore(a.downloadListStore)
 		}
 		expectResult(a.gtkBuilder.GetObject("pane_downloads")).(*gtk.Box).SetSensitive(true)
 	}
