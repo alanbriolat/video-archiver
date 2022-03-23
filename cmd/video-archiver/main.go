@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+
+	"github.com/alanbriolat/video-archiver/database"
 )
 
+const appName = "video-archiver"
 const appId = "co.hexi.video-archiver"
 
 //go:embed main.glade
@@ -32,6 +36,7 @@ const (
 )
 
 type application struct {
+	database              *database.Database
 	collections           []collection
 	currentCollection     *collection
 	gtkApplication        *gtk.Application
@@ -46,6 +51,17 @@ type application struct {
 func newApplication() (*application, error) {
 	var err error
 	a := &application{}
+
+	configPath := filepath.Join(glib.GetUserConfigDir(), appName)
+	expect(os.MkdirAll(configPath, 0750))
+	//databasePath := filepath.Join(glib.GetUserConfigDir(), appName, "database.sqlite3")
+	databasePath := ":memory:"
+	if a.database, err = database.NewDatabase(databasePath); err != nil {
+		return nil, err
+	}
+	if err = a.database.Migrate(); err != nil {
+		return nil, err
+	}
 
 	if a.gtkApplication, err = gtk.ApplicationNew(appId, glib.APPLICATION_FLAGS_NONE); err != nil {
 		return nil, err
@@ -128,6 +144,7 @@ func (a *application) onActivate() {
 
 func (a *application) onShutdown() {
 	log.Println("application shutdown")
+	a.database.Close()
 }
 
 func (a *application) addNewCollection(name string, path string) {
