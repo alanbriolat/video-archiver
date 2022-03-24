@@ -40,7 +40,8 @@ const (
 )
 
 const (
-	DOWNLOAD_COLUMN_URL = iota
+	DOWNLOAD_COLUMN_ID = iota
+	DOWNLOAD_COLUMN_URL
 	DOWNLOAD_COLUMN_PROGRESS
 )
 
@@ -48,6 +49,7 @@ type application struct {
 	database              *database.Database
 	collections           map[database.RowID]*collection
 	currentCollection     *collection
+	downloads             map[database.RowID]*download
 	gtkApplication        *gtk.Application
 	gtkBuilder            *gtk.Builder
 	window                *gtk.Window
@@ -177,28 +179,43 @@ func (a *application) mustRefreshCollections() {
 	}
 }
 
+func (a *application) mustRefreshDownloads() {
+	a.downloads = make(map[database.RowID]*download)
+	a.downloadListStore.Clear()
+
+	if a.currentCollection == nil {
+		return
+	} else {
+		for _, dbDownload := range expectResult(a.database.GetCollectionDownloads(a.currentCollection.ID)) {
+			d := newDownloadFromDB(dbDownload)
+			a.downloads[d.ID] = d
+			d.appendToListStore(a.downloadListStore)
+		}
+	}
+}
+
 func (a *application) addNewCollection(name string, path string) {
 	c := newCollection(name, path)
 	// TODO: handle duplicate collection name
 	expect(a.database.InsertCollection(&c.Collection))
 	a.collections[c.ID] = c
 	c.appendToListStore(a.collectionListStore)
-	// If this is the first collection, automatically select it
-	//if len(a.collections) == 1 {
-	//	a.setCurrentCollection(c.ID)
-	//}
+	// TODO: just always select the new row instead
+	if len(a.collections) == 1 {
+		expectResult(a.collectionListView.GetSelection()).SelectPath(expectResult(gtk.TreePathNewFirst()))
+	}
 }
 
 func (a *application) addNewDownload(url string) {
-	log.Printf("Adding %#v to %v", url, a.currentCollection)
-	a.currentCollection.downloads = append(a.currentCollection.downloads, download{url})
-	download := &a.currentCollection.downloads[len(a.currentCollection.downloads)-1]
-	download.appendToListStore(a.downloadListStore)
+	d := newDownload(a.currentCollection.ID, url)
+	expect(a.database.InsertDownload(&d.Download))
+	a.downloads[d.ID] = d
+	d.appendToListStore(a.downloadListStore)
 }
 
 func (a *application) unsetCurrentCollection() {
 	a.currentCollection = nil
-	a.downloadListStore.Clear()
+	a.mustRefreshDownloads()
 	expectResult(a.gtkBuilder.GetObject("pane_downloads")).(*gtk.Box).SetSensitive(false)
 }
 
@@ -209,15 +226,12 @@ func (a *application) setCurrentCollection(id database.RowID) {
 	//if row := a.collectionList.GetSelectedRow(); row == nil || row.GetIndex() != index {
 	//	a.collectionList.SelectRow(a.collectionList.GetRowAtIndex(index))
 	//}
-	for _, download := range a.currentCollection.downloads {
-		download.appendToListStore(a.downloadListStore)
-	}
+	a.mustRefreshDownloads()
 	expectResult(a.gtkBuilder.GetObject("pane_downloads")).(*gtk.Box).SetSensitive(true)
 }
 
 type collection struct {
 	database.Collection
-	downloads []download
 }
 
 func newCollection(name string, path string) *collection {
@@ -236,8 +250,11 @@ func (c *collection) appendToListStore(store *gtk.ListStore) {
 }
 
 func (c *collection) addToListStore(store *gtk.ListStore, iter *gtk.TreeIter) {
-	log.Println("adding to list store", c.String())
-	expect(store.Set(iter, []int{COLLECTION_COLUMN_ID, COLLECTION_COLUMN_NAME, COLLECTION_COLUMN_PATH}, []interface{}{c.ID, c.Name, c.Path}))
+	expect(store.Set(
+		iter,
+		[]int{COLLECTION_COLUMN_ID, COLLECTION_COLUMN_NAME, COLLECTION_COLUMN_PATH},
+		[]interface{}{c.ID, c.Name, c.Path},
+	))
 }
 
 func (c *collection) String() string {
@@ -245,7 +262,19 @@ func (c *collection) String() string {
 }
 
 type download struct {
-	url string
+	database.Download
+	progress int
+}
+
+func newDownload(collectionID database.RowID, url string) *download {
+	d := &download{}
+	d.CollectionID = collectionID
+	d.URL = url
+	return d
+}
+
+func newDownloadFromDB(d database.Download) *download {
+	return &download{Download: d}
 }
 
 func (d *download) appendToListStore(store *gtk.ListStore) {
@@ -253,7 +282,11 @@ func (d *download) appendToListStore(store *gtk.ListStore) {
 }
 
 func (d *download) addToListStore(store *gtk.ListStore, iter *gtk.TreeIter) {
-	expect(store.Set(iter, []int{DOWNLOAD_COLUMN_URL, DOWNLOAD_COLUMN_PROGRESS}, []interface{}{d.url, 0}))
+	expect(store.Set(
+		iter,
+		[]int{DOWNLOAD_COLUMN_ID, DOWNLOAD_COLUMN_URL, DOWNLOAD_COLUMN_PROGRESS},
+		[]interface{}{d.ID, d.URL, d.progress},
+	))
 }
 
 func main() {
