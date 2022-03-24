@@ -15,6 +15,8 @@ import (
 //go:embed migrations/*.sql
 var embedMigrations embed.FS
 
+type RowID = int64
+
 type Database struct {
 	db *sqlx.DB
 }
@@ -91,14 +93,14 @@ func (d *Database) RefreshCollection(c *Collection) error {
 }
 
 type Collection struct {
-	ID   int64 `db:"rowid"`
+	ID   RowID `db:"rowid"`
 	Name string
 	Path string
 }
 
 type Download struct {
-	ID           int64 `db:"rowid"`
-	CollectionID int64 `db:"collection_id"`
+	ID           RowID `db:"rowid"`
+	CollectionID RowID `db:"collection_id"`
 	URL          string
 	Added        time.Time
 }
