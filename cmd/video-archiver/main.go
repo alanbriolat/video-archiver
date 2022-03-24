@@ -232,6 +232,7 @@ func (a *application) setCurrentCollection(id database.RowID) {
 
 type collection struct {
 	database.Collection
+	treeRef *gtk.TreeRowReference
 }
 
 func newCollection(name string, path string) *collection {
@@ -250,11 +251,29 @@ func (c *collection) appendToListStore(store *gtk.ListStore) {
 }
 
 func (c *collection) addToListStore(store *gtk.ListStore, iter *gtk.TreeIter) {
-	expect(store.Set(
-		iter,
-		[]int{COLLECTION_COLUMN_ID, COLLECTION_COLUMN_NAME, COLLECTION_COLUMN_PATH},
-		[]interface{}{c.ID, c.Name, c.Path},
-	))
+	if c.treeRef != nil {
+		panic("already added to list store")
+	}
+	c.treeRef = expectResult(gtk.TreeRowReferenceNew(store.ToTreeModel(), expectResult(store.GetPath(iter))))
+	c.updateView()
+}
+
+func (c *collection) updateView() {
+	// TODO: figure out how best to avoid code duplication here
+	if c.treeRef == nil {
+		log.Println("no tree row reference")
+	} else if !c.treeRef.Valid() {
+		log.Println("tree row reference invalid")
+		c.treeRef = nil
+	} else {
+		model := expectResult(c.treeRef.GetModel())
+		iter := expectResult(model.ToTreeModel().GetIter(c.treeRef.GetPath()))
+		expect(model.(*gtk.ListStore).Set(
+			iter,
+			[]int{COLLECTION_COLUMN_ID, COLLECTION_COLUMN_NAME, COLLECTION_COLUMN_PATH},
+			[]interface{}{c.ID, c.Name, c.Path},
+		))
+	}
 }
 
 func (c *collection) String() string {
@@ -264,6 +283,7 @@ func (c *collection) String() string {
 type download struct {
 	database.Download
 	progress int
+	treeRef  *gtk.TreeRowReference
 }
 
 func newDownload(collectionID database.RowID, url string) *download {
@@ -282,11 +302,29 @@ func (d *download) appendToListStore(store *gtk.ListStore) {
 }
 
 func (d *download) addToListStore(store *gtk.ListStore, iter *gtk.TreeIter) {
-	expect(store.Set(
-		iter,
-		[]int{DOWNLOAD_COLUMN_ID, DOWNLOAD_COLUMN_URL, DOWNLOAD_COLUMN_PROGRESS},
-		[]interface{}{d.ID, d.URL, d.progress},
-	))
+	if d.treeRef != nil {
+		panic("already added to list store")
+	}
+	d.treeRef = expectResult(gtk.TreeRowReferenceNew(store.ToTreeModel(), expectResult(store.GetPath(iter))))
+	d.updateView()
+}
+
+func (d *download) updateView() {
+	// TODO: figure out how best to avoid code duplication here
+	if d.treeRef == nil {
+		log.Println("no tree row reference")
+	} else if !d.treeRef.Valid() {
+		log.Println("tree row reference invalid")
+		d.treeRef = nil
+	} else {
+		model := expectResult(d.treeRef.GetModel())
+		iter := expectResult(model.ToTreeModel().GetIter(d.treeRef.GetPath()))
+		expect(model.(*gtk.ListStore).Set(
+			iter,
+			[]int{DOWNLOAD_COLUMN_ID, DOWNLOAD_COLUMN_URL, DOWNLOAD_COLUMN_PROGRESS},
+			[]interface{}{d.ID, d.URL, d.progress},
+		))
+	}
 }
 
 func main() {
