@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -18,6 +19,8 @@ const appId = "co.hexi.video-archiver"
 
 //go:embed main.glade
 var glade string
+
+var databasePath = flag.String("database", filepath.Join(glib.GetUserConfigDir(), appName, "database.sqlite3"), "override database path")
 
 func expect(err error) {
 	if err != nil {
@@ -54,9 +57,7 @@ func newApplication() (*application, error) {
 
 	configPath := filepath.Join(glib.GetUserConfigDir(), appName)
 	expect(os.MkdirAll(configPath, 0750))
-	//databasePath := filepath.Join(glib.GetUserConfigDir(), appName, "database.sqlite3")
-	databasePath := ":memory:"
-	if a.database, err = database.NewDatabase(databasePath); err != nil {
+	if a.database, err = database.NewDatabase(*databasePath); err != nil {
 		return nil, err
 	}
 	if err = a.database.Migrate(); err != nil {
@@ -209,6 +210,7 @@ func (d *download) addToListStore(store *gtk.ListStore, iter *gtk.TreeIter) {
 }
 
 func main() {
+	flag.Parse()
 	a := expectResult(newApplication())
-	a.runAndExit()
+	a.runWithArgsAndExit([]string{})
 }

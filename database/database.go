@@ -2,6 +2,8 @@ package database
 
 import (
 	"embed"
+	"log"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
@@ -26,6 +28,7 @@ func NewDatabase(path string) (*Database, error) {
 }
 
 func (d *Database) Migrate() error {
+	log.Println("running database migrations")
 	fs, err := iofs.New(embedMigrations, "migrations")
 	if err != nil {
 		return err
@@ -41,7 +44,9 @@ func (d *Database) Migrate() error {
 	err = m.Up()
 	switch err {
 	case nil:
+		log.Println("database migration complete")
 	case migrate.ErrNoChange:
+		log.Println("no database migration required")
 	default:
 		return err
 	}
@@ -50,4 +55,50 @@ func (d *Database) Migrate() error {
 
 func (d *Database) Close() {
 	_ = d.db.Close()
+}
+
+func (d *Database) GetAllCollections() ([]Collection, error) {
+	var collections []Collection
+	if err := d.db.Select(&collections, `SELECT * FROM collection ORDER BY name`); err != nil {
+		return nil, err
+	}
+	return collections, nil
+}
+
+func (d *Database) GetCollectionDownloads(id uint64) ([]Download, error) {
+	var downloads []Download
+	if err := d.db.Select(&downloads, `SELECT * FROM download WHERE collection_id = ? ORDER BY added DESC`, id); err != nil {
+		return nil, err
+	}
+	return downloads, nil
+}
+
+// InsertCollection will add a new collection to the database, overwriting Collection.ID with the new row ID.
+func (d *Database) InsertCollection(c *Collection) error {
+	res, err := d.db.NamedExec(`INSERT INTO collection (name, path) VALUES (:name, :path)`, c)
+	if err != nil {
+		return err
+	}
+	if c.ID, err = res.LastInsertId(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// RefreshCollection will reload the collection information from the database.
+func (d *Database) RefreshCollection(c *Collection) error {
+	return d.db.Get(c, `SELECT * FROM collection WHERE rowid = ?`, c.ID)
+}
+
+type Collection struct {
+	ID   int64 `db:"rowid"`
+	Name string
+	Path string
+}
+
+type Download struct {
+	ID           int64 `db:"rowid"`
+	CollectionID int64 `db:"collection_id"`
+	URL          string
+	Added        time.Time
 }
