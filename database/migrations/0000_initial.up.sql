@@ -9,7 +9,7 @@ CREATE TABLE download
 (
     collection_id int NOT NULL,
     url       text NOT NULL,
-    state     text NOT NULL DEFAULT 'new',
     added     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    state     text NOT NULL DEFAULT 'new',
     FOREIGN KEY (collection_id) REFERENCES collection(rowid)
 )

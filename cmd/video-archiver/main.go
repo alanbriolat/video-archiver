@@ -42,6 +42,8 @@ const (
 const (
 	DOWNLOAD_COLUMN_ID = iota
 	DOWNLOAD_COLUMN_URL
+	DOWNLOAD_COLUMN_ADDED
+	DOWNLOAD_COLUMN_STATE
 	DOWNLOAD_COLUMN_PROGRESS
 )
 
@@ -321,8 +323,8 @@ func (d *download) updateView() {
 		iter := expectResult(model.ToTreeModel().GetIter(d.treeRef.GetPath()))
 		expect(model.(*gtk.ListStore).Set(
 			iter,
-			[]int{DOWNLOAD_COLUMN_ID, DOWNLOAD_COLUMN_URL, DOWNLOAD_COLUMN_PROGRESS},
-			[]interface{}{d.ID, d.URL, d.progress},
+			[]int{DOWNLOAD_COLUMN_ID, DOWNLOAD_COLUMN_URL, DOWNLOAD_COLUMN_ADDED, DOWNLOAD_COLUMN_STATE, DOWNLOAD_COLUMN_PROGRESS},
+			[]interface{}{d.ID, d.URL, d.Added.Format("2006-01-02 15:04:05"), d.State.String(), d.progress},
 		))
 	}
 }

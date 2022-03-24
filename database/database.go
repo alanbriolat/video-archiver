@@ -115,6 +115,10 @@ type Collection struct {
 
 type DownloadState string
 
+func (s *DownloadState) String() string {
+	return string(*s)
+}
+
 const (
 	DOWNLOAD_STATE_NEW DownloadState = "new"
 )
@@ -123,6 +127,6 @@ type Download struct {
 	ID           RowID `db:"rowid"`
 	CollectionID RowID `db:"collection_id"`
 	URL          string
-	State        DownloadState
 	Added        time.Time
+	State        DownloadState
 }
