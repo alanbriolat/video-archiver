@@ -23,10 +23,3 @@ type Source interface {
 	// Download should fetch the actual video.
 	Download(context.Context, *download.DownloadState) error
 }
-
-type Provider interface {
-	// Name of the provider, e.g. "YouTube". Must be unique.
-	Name() string
-	// MatchURL should match a URL if possible, returning nil if not.
-	MatchURL(*url.URL) Source
-}

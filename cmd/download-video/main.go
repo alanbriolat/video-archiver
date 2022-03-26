@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"log"
-	"net/url"
 
 	"go.uber.org/zap"
 
@@ -29,29 +28,29 @@ func main() {
 	if len(*source) == 0 || len(*target) == 0 {
 		logger.Fatal("usage: download-video --source https://site.com/videos/id --target /path/to/downloads/")
 	}
-	sourceUrl, err := url.Parse(*source)
-	if err != nil {
-		logger.Sugar().Fatalf("%v not a valid URL", *source)
+
+	logger.Sugar().Infof("Downloading from %s into %s", *source, *target)
+
+	registry := video_archiver.ProviderRegistry{}
+	if err := registry.Add(youtube.New()); err != nil {
+		logger.Sugar().Fatalf("error adding provider: %v", err)
 	}
 
-	logger.Sugar().Infof("Downloading from %s into %s", sourceUrl, *target)
-
-	provider := youtube.NewProvider()
-	dl := provider.MatchURL(sourceUrl)
-	if dl == nil {
-		logger.Fatal("Source URL didn't match a provider")
+	match, err := registry.Match(*source)
+	if err != nil {
+		logger.Sugar().Fatalf("Match failed: %v", err)
 	}
 
 	logger.Info("Starting recon...")
-	if err := dl.Recon(ctx); err != nil {
+	if err := match.Source.Recon(ctx); err != nil {
 		logger.Sugar().Fatalf("Recon failed: %v", err)
 	}
-	logger.Sugar().Infof("%+v", *dl.Info())
+	logger.Sugar().Infof("%+v", *match.Source.Info())
 
 	logger.Info("Starting download...")
 	err = download.WithDownloadState(
 		func(state *download.DownloadState) error {
-			return dl.Download(ctx, state)
+			return match.Source.Download(ctx, state)
 		},
 		download.WithTargetDir(*target),
 	)

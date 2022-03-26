@@ -11,6 +11,7 @@ import (
 	"github.com/kkdai/youtube/v2"
 	"github.com/schollz/progressbar/v3"
 
+	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/download"
 	"github.com/alanbriolat/video-archiver/provider"
 )
@@ -86,25 +87,18 @@ func (s *Source) Download(ctx context.Context, state *download.DownloadState) er
 	return nil
 }
 
-type Provider struct{}
-
-func (p *Provider) Name() string {
-	return "youtube"
-}
-
-func (p *Provider) MatchURL(url *url.URL) provider.Source {
-	if videoID, err := extractVideoID(url); err == nil {
-		return newSource(*videoID)
+func Match(s string) (provider.Source, error) {
+	if parsedURL, err := url.Parse(s); err != nil {
+		return nil, err
+	} else if videoID, err := extractVideoID(parsedURL); err != nil {
+		return nil, err
+	} else {
+		return &Source{videoID: *videoID}, nil
 	}
-	return nil
 }
 
-func NewProvider() provider.Provider {
-	return &Provider{}
-}
-
-func newSource(videoID string) provider.Source {
-	return &Source{videoID: videoID}
+func New() video_archiver.Provider {
+	return video_archiver.Provider{Name: "youtube", Match: Match}
 }
 
 // Extract video ID from YouTube URL.
