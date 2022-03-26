@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net/url"
 	"strings"
 
@@ -13,12 +12,18 @@ import (
 
 	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/download"
-	"github.com/alanbriolat/video-archiver/provider"
 )
 
 type sourceInfo struct {
-	provider.SourceInfo
 	videoDetails *youtube.Video
+}
+
+func (i *sourceInfo) ID() string {
+	return i.videoDetails.ID
+}
+
+func (i *sourceInfo) Title() string {
+	return i.videoDetails.Title
 }
 
 type Source struct {
@@ -26,36 +31,25 @@ type Source struct {
 	info    *sourceInfo
 }
 
-func (s *Source) URL() *url.URL {
-	if videoURL, err := url.Parse(fmt.Sprintf("https://www.youtube.com/watch?v=%s", s.videoID)); err != nil {
-		log.Fatalf("failed to parse generated URL: %v", err)
-		return nil
-	} else {
-		return videoURL
-	}
+func (s *Source) URL() string {
+	return fmt.Sprintf("https://www.youtube.com/watch?v=%s", s.videoID)
 }
 
-func (s *Source) Info() *provider.SourceInfo {
+func (s *Source) Info() video_archiver.SourceInfo {
 	if s.info == nil {
 		return nil
 	} else {
-		return &s.info.SourceInfo
+		return s.info
 	}
 }
 
 func (s *Source) Recon(ctx context.Context) error {
 	client := youtube.Client{}
-	video, err := client.GetVideoContext(ctx, s.URL().String())
+	video, err := client.GetVideoContext(ctx, s.URL())
 	if err != nil {
 		return err
 	}
-	s.info = &sourceInfo{
-		SourceInfo: provider.SourceInfo{
-			ID:    video.ID,
-			Title: video.Title,
-		},
-		videoDetails: video,
-	}
+	s.info = &sourceInfo{videoDetails: video}
 	return nil
 }
 
@@ -87,7 +81,7 @@ func (s *Source) Download(ctx context.Context, state *download.DownloadState) er
 	return nil
 }
 
-func Match(s string) (provider.Source, error) {
+func Match(s string) (video_archiver.Source, error) {
 	if parsedURL, err := url.Parse(s); err != nil {
 		return nil, err
 	} else if videoID, err := extractVideoID(parsedURL); err != nil {

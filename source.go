@@ -1,23 +1,23 @@
-package provider
+package video_archiver
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/alanbriolat/video-archiver/download"
 )
 
-type SourceInfo struct {
-	ID    string
-	Title string
+type SourceInfo interface {
+	ID() string
+	Title() string
 }
 
 type Source interface {
-	// URL should return a value such that Provider.MatchURL would give the same Source.
-	URL() *url.URL
+	// URL should return the canonical URL for this source. It is assumed that the Provider.Match that created the
+	// Source would successfully match this canonical URL.
+	URL() string
 	// Info should return information about the download if available, or nil if not. Expected to be nil until after a
 	// successful call to Recon.
-	Info() *SourceInfo
+	Info() SourceInfo
 	// Recon should fetch and store additional information about the download, such that Info will return non-nil.
 	Recon(context.Context) error
 	// Download should fetch the actual video.

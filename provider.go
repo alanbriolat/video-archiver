@@ -4,8 +4,6 @@ import (
 	"errors"
 	"math"
 	"sort"
-
-	"github.com/alanbriolat/video-archiver/provider"
 )
 
 var (
@@ -24,14 +22,14 @@ var (
 
 type Provider struct {
 	Name  string
-	Match func(string) (provider.Source, error)
+	Match func(string) (Source, error)
 	// Priority of the matcher, lower (including negative) means matching earlier.
 	Priority int16
 }
 
 type Match struct {
 	ProviderName string
-	Source       provider.Source
+	Source       Source
 }
 
 type ProviderRegistry struct {
@@ -58,7 +56,7 @@ func (r *ProviderRegistry) Add(p Provider) error {
 }
 
 // Create is a shortcut for Add(Provider{Name: ..., Match: ...}).
-func (r *ProviderRegistry) Create(name string, f func(string) (provider.Source, error)) error {
+func (r *ProviderRegistry) Create(name string, f func(string) (Source, error)) error {
 	return r.Add(Provider{
 		Name:  name,
 		Match: f,
@@ -66,7 +64,7 @@ func (r *ProviderRegistry) Create(name string, f func(string) (provider.Source, 
 }
 
 // CreatePriority is a shortcut for Add(Provider{Name: ..., Match: ..., Priority: ...}).
-func (r *ProviderRegistry) CreatePriority(name string, f func(string) (provider.Source, error), priority int16) error {
+func (r *ProviderRegistry) CreatePriority(name string, f func(string) (Source, error), priority int16) error {
 	return r.Add(Provider{
 		Name:     name,
 		Match:    f,

@@ -45,7 +45,6 @@ func main() {
 	if err := match.Source.Recon(ctx); err != nil {
 		logger.Sugar().Fatalf("Recon failed: %v", err)
 	}
-	logger.Sugar().Infof("%+v", *match.Source.Info())
 
 	logger.Info("Starting download...")
 	err = download.WithDownloadState(
