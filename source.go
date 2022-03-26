@@ -9,6 +9,7 @@ import (
 type SourceInfo interface {
 	ID() string
 	Title() string
+	Ext() string
 }
 
 type Source interface {

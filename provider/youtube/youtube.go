@@ -16,6 +16,7 @@ import (
 
 type sourceInfo struct {
 	videoDetails *youtube.Video
+	videoFormat  *youtube.Format
 }
 
 func (i *sourceInfo) ID() string {
@@ -24,6 +25,12 @@ func (i *sourceInfo) ID() string {
 
 func (i *sourceInfo) Title() string {
 	return i.videoDetails.Title
+}
+
+func (i *sourceInfo) Ext() string {
+	mimeType := strings.SplitN(i.videoFormat.MimeType, ";", 2)[0]
+	parts := strings.SplitN(mimeType, "/", 2)
+	return parts[1]
 }
 
 type Source struct {
@@ -45,11 +52,14 @@ func (s *Source) Info() video_archiver.SourceInfo {
 
 func (s *Source) Recon(ctx context.Context) error {
 	client := youtube.Client{}
-	video, err := client.GetVideoContext(ctx, s.URL())
+	videoDetails, err := client.GetVideoContext(ctx, s.URL())
 	if err != nil {
 		return err
 	}
-	s.info = &sourceInfo{videoDetails: video}
+	// TODO: select "highest" quality
+	formats := videoDetails.Formats.WithAudioChannels()
+	videoFormat := &formats[0]
+	s.info = &sourceInfo{videoDetails, videoFormat}
 	return nil
 }
 
@@ -64,9 +74,8 @@ func (s *Source) Download(ctx context.Context, state *download.DownloadState) er
 	}
 	defer tempFile.Close()
 
-	formats := s.info.videoDetails.Formats.WithAudioChannels()
 	client := youtube.Client{}
-	stream, size, err := client.GetStream(s.info.videoDetails, &formats[0])
+	stream, size, err := client.GetStream(s.info.videoDetails, s.info.videoFormat)
 	if err != nil {
 		return err
 	}
