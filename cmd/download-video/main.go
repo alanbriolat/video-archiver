@@ -9,6 +9,7 @@ import (
 
 	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/download"
+	"github.com/alanbriolat/video-archiver/generic"
 	"github.com/alanbriolat/video-archiver/provider/youtube"
 )
 
@@ -45,6 +46,10 @@ func main() {
 	if err := match.Source.Recon(ctx); err != nil {
 		logger.Sugar().Fatalf("Recon failed: %v", err)
 	}
+
+	config := video_archiver.NewDownloadConfig()
+	targetPath := generic.UnwrapResult(config.GetTargetPath(match))
+	logger.Sugar().Infof("Writing to %v", targetPath)
 
 	logger.Info("Starting download...")
 	err = download.WithDownloadState(
