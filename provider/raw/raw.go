@@ -143,3 +143,11 @@ func (s *source) Download(ctx context.Context, state *download.DownloadState) er
 
 	return nil
 }
+
+func init() {
+	generic.Unwrap_(
+		video_archiver.DefaultProviderRegistry.Add(
+			NewConfig().Provider().WithPriority(video_archiver.PriorityLowest),
+		),
+	)
+}

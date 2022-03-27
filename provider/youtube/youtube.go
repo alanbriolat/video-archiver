@@ -12,6 +12,7 @@ import (
 
 	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/download"
+	"github.com/alanbriolat/video-archiver/generic"
 )
 
 type sourceInfo struct {
@@ -135,4 +136,8 @@ func extractVideoID(url *url.URL) (*string, error) {
 		return nil, fmt.Errorf("could not extract video ID")
 	}
 	return &id, nil
+}
+
+func init() {
+	generic.Unwrap_(video_archiver.DefaultProviderRegistry.Create("youtube", Match))
 }

@@ -151,3 +151,5 @@ func (r *ProviderRegistry) sortByPriority() {
 		return r.providers[i].Priority < r.providers[j].Priority
 	})
 }
+
+var DefaultProviderRegistry ProviderRegistry

@@ -10,8 +10,8 @@ import (
 	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/download"
 	"github.com/alanbriolat/video-archiver/generic"
-	"github.com/alanbriolat/video-archiver/provider/raw"
-	"github.com/alanbriolat/video-archiver/provider/youtube"
+	_ "github.com/alanbriolat/video-archiver/provider/raw"
+	_ "github.com/alanbriolat/video-archiver/provider/youtube"
 )
 
 func main() {
@@ -33,11 +33,7 @@ func main() {
 
 	logger.Sugar().Infof("Downloading from %s into %s", *source, *target)
 
-	registry := video_archiver.ProviderRegistry{}
-	generic.Expect_("error adding provider")(registry.Add(youtube.New()))
-	generic.Expect_("error adding provider")(registry.Add(raw.NewConfig().Provider().WithPriority(video_archiver.PriorityLowest)))
-
-	match, err := registry.Match(*source)
+	match, err := video_archiver.DefaultProviderRegistry.Match(*source)
 	if err != nil {
 		logger.Sugar().Fatalf("Match failed: %v", err)
 	}
