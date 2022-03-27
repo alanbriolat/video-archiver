@@ -20,6 +20,7 @@ var (
 	PriorityLowest  int16 = math.MaxInt16
 )
 
+// A Provider matches any URL it knows how to handle, giving a Source that can be used to download the video.
 type Provider struct {
 	Name  string
 	Match func(string) (Source, error)
@@ -27,11 +28,23 @@ type Provider struct {
 	Priority int16
 }
 
+func (p Provider) WithName(name string) Provider {
+	p.Name = name
+	return p
+}
+
+func (p Provider) WithPriority(priority int16) Provider {
+	p.Priority = priority
+	return p
+}
+
+// A Match is the result of a Provider successfully matching a URL.
 type Match struct {
 	ProviderName string
 	Source       Source
 }
 
+// A ProviderRegistry is a collection of Provider instances which can be used to try to match URLs.
 type ProviderRegistry struct {
 	providers   []*Provider
 	providerMap map[string]*Provider

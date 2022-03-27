@@ -81,6 +81,7 @@ func (s *Source) Download(ctx context.Context, state *download.DownloadState) er
 	}
 	defer stream.Close()
 
+	// TODO: eliminate this code duplication
 	bar := progressbar.DefaultBytes(size, "downloading")
 	_, err = io.Copy(io.MultiWriter(tempFile, bar), stream)
 	if err != nil {

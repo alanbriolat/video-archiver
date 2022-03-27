@@ -10,6 +10,7 @@ import (
 	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/download"
 	"github.com/alanbriolat/video-archiver/generic"
+	"github.com/alanbriolat/video-archiver/provider/raw"
 	"github.com/alanbriolat/video-archiver/provider/youtube"
 )
 
@@ -34,6 +35,7 @@ func main() {
 
 	registry := video_archiver.ProviderRegistry{}
 	generic.Expect_("error adding provider")(registry.Add(youtube.New()))
+	generic.Expect_("error adding provider")(registry.Add(raw.NewConfig().Provider().WithPriority(video_archiver.PriorityLowest)))
 
 	match, err := registry.Match(*source)
 	if err != nil {
