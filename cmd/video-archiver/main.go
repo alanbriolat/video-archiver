@@ -12,6 +12,7 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 
 	"github.com/alanbriolat/video-archiver/database"
+	"github.com/alanbriolat/video-archiver/generic"
 )
 
 const appName = "video-archiver"
@@ -21,17 +22,6 @@ const appId = "co.hexi.video-archiver"
 var glade string
 
 var databasePath = flag.String("database", filepath.Join(glib.GetUserConfigDir(), appName, "database.sqlite3"), "override database path")
-
-func expect(err error) {
-	if err != nil {
-		log.Panic(err)
-	}
-}
-
-func expectResult[T any](val T, err error) T {
-	expect(err)
-	return val
-}
 
 const (
 	COLLECTION_COLUMN_ID = iota
@@ -69,7 +59,7 @@ func newApplication() (*application, error) {
 	}
 
 	configPath := filepath.Join(glib.GetUserConfigDir(), appName)
-	expect(os.MkdirAll(configPath, 0750))
+	generic.Unwrap_(os.MkdirAll(configPath, 0750))
 	if a.database, err = database.NewDatabase(*databasePath); err != nil {
 		return nil, err
 	}
@@ -111,38 +101,38 @@ func (a *application) onStartup() {
 func (a *application) onActivate() {
 	log.Println("application activate")
 
-	a.gtkBuilder = expectResult(gtk.BuilderNewFromString(glade))
-	a.window = expectResult(a.gtkBuilder.GetObject("window_main")).(*gtk.Window)
+	a.gtkBuilder = generic.Unwrap(gtk.BuilderNewFromString(glade))
+	a.window = generic.Unwrap(a.gtkBuilder.GetObject("window_main")).(*gtk.Window)
 	a.window.Show()
 	a.gtkApplication.AddWindow(a.window)
 
-	a.collectionListView = expectResult(a.gtkBuilder.GetObject("tree_collections")).(*gtk.TreeView)
-	collectionSelection := expectResult(a.collectionListView.GetSelection())
+	a.collectionListView = generic.Unwrap(a.gtkBuilder.GetObject("tree_collections")).(*gtk.TreeView)
+	collectionSelection := generic.Unwrap(a.collectionListView.GetSelection())
 	collectionSelection.SetMode(gtk.SELECTION_SINGLE)
 	collectionSelection.Connect("changed", func(selection *gtk.TreeSelection) {
 		model, iter, ok := selection.GetSelected()
 		if ok {
-			id := expectResult(expectResult(model.ToTreeModel().GetValue(iter, COLLECTION_COLUMN_ID)).GoValue()).(int64)
+			id := generic.Unwrap(generic.Unwrap(model.ToTreeModel().GetValue(iter, COLLECTION_COLUMN_ID)).GoValue()).(int64)
 			a.setCurrentCollection(id)
 		} else {
 			a.unsetCurrentCollection()
 		}
 	})
-	a.collectionListStore = expectResult(a.gtkBuilder.GetObject("list_store_collections")).(*gtk.ListStore)
+	a.collectionListStore = generic.Unwrap(a.gtkBuilder.GetObject("list_store_collections")).(*gtk.ListStore)
 
-	a.downloadListView = expectResult(a.gtkBuilder.GetObject("tree_downloads")).(*gtk.TreeView)
-	a.downloadListStore = expectResult(a.gtkBuilder.GetObject("list_store_downloads")).(*gtk.ListStore)
+	a.downloadListView = generic.Unwrap(a.gtkBuilder.GetObject("tree_downloads")).(*gtk.TreeView)
+	a.downloadListStore = generic.Unwrap(a.gtkBuilder.GetObject("list_store_downloads")).(*gtk.ListStore)
 
-	btnNewCollection := expectResult(a.gtkBuilder.GetObject("btn_new_collection")).(*gtk.Button)
+	btnNewCollection := generic.Unwrap(a.gtkBuilder.GetObject("btn_new_collection")).(*gtk.Button)
 	btnNewCollection.Connect("clicked", func() {
-		dialog := expectResult(a.gtkBuilder.GetObject("dialog_new_collection")).(*gtk.Dialog)
-		nameEntry := expectResult(a.gtkBuilder.GetObject("entry_new_collection_name")).(*gtk.Entry)
-		pathChooser := expectResult(a.gtkBuilder.GetObject("choose_new_collection_path")).(*gtk.FileChooserButton)
+		dialog := generic.Unwrap(a.gtkBuilder.GetObject("dialog_new_collection")).(*gtk.Dialog)
+		nameEntry := generic.Unwrap(a.gtkBuilder.GetObject("entry_new_collection_name")).(*gtk.Entry)
+		pathChooser := generic.Unwrap(a.gtkBuilder.GetObject("choose_new_collection_path")).(*gtk.FileChooserButton)
 		nameEntry.GrabFocus()
 		dialog.ShowAll()
 
 		if response := dialog.Run(); response == gtk.RESPONSE_OK {
-			name := expectResult(nameEntry.GetText())
+			name := generic.Unwrap(nameEntry.GetText())
 			path := pathChooser.GetFilename()
 			a.addNewCollection(name, path)
 		} else {
@@ -154,10 +144,10 @@ func (a *application) onActivate() {
 		pathChooser.UnselectAll()
 	})
 
-	btnNewDownload := expectResult(a.gtkBuilder.GetObject("btn_new_download")).(*gtk.Button)
+	btnNewDownload := generic.Unwrap(a.gtkBuilder.GetObject("btn_new_download")).(*gtk.Button)
 	btnNewDownload.Connect("clicked", func() {
-		urlEntry := expectResult(a.gtkBuilder.GetObject("entry_new_download_url")).(*gtk.Entry)
-		url := expectResult(urlEntry.GetText())
+		urlEntry := generic.Unwrap(a.gtkBuilder.GetObject("entry_new_download_url")).(*gtk.Entry)
+		url := generic.Unwrap(urlEntry.GetText())
 		a.addNewDownload(url)
 		urlEntry.SetText("")
 	})
@@ -174,7 +164,7 @@ func (a *application) mustRefreshCollections() {
 	a.collections = make(map[database.RowID]*collection)
 	a.collectionListStore.Clear()
 
-	for _, dbCollection := range expectResult(a.database.GetAllCollections()) {
+	for _, dbCollection := range generic.Unwrap(a.database.GetAllCollections()) {
 		c := newCollectionFromDB(dbCollection)
 		a.collections[c.ID] = c
 		c.appendToListStore(a.collectionListStore)
@@ -188,7 +178,7 @@ func (a *application) mustRefreshDownloads() {
 	if a.currentCollection == nil {
 		return
 	} else {
-		for _, dbDownload := range expectResult(a.database.GetCollectionDownloads(a.currentCollection.ID)) {
+		for _, dbDownload := range generic.Unwrap(a.database.GetCollectionDownloads(a.currentCollection.ID)) {
 			d := newDownloadFromDB(dbDownload)
 			a.downloads[d.ID] = d
 			d.appendToListStore(a.downloadListStore)
@@ -199,18 +189,18 @@ func (a *application) mustRefreshDownloads() {
 func (a *application) addNewCollection(name string, path string) {
 	c := newCollection(name, path)
 	// TODO: handle duplicate collection name
-	expect(a.database.InsertCollection(&c.Collection))
+	generic.Unwrap_(a.database.InsertCollection(&c.Collection))
 	a.collections[c.ID] = c
 	c.appendToListStore(a.collectionListStore)
 	// TODO: just always select the new row instead
 	if len(a.collections) == 1 {
-		expectResult(a.collectionListView.GetSelection()).SelectPath(expectResult(gtk.TreePathNewFirst()))
+		generic.Unwrap(a.collectionListView.GetSelection()).SelectPath(generic.Unwrap(gtk.TreePathNewFirst()))
 	}
 }
 
 func (a *application) addNewDownload(url string) {
 	d := newDownload(a.currentCollection.ID, url)
-	expect(a.database.InsertDownload(&d.Download))
+	generic.Unwrap_(a.database.InsertDownload(&d.Download))
 	a.downloads[d.ID] = d
 	d.appendToListStore(a.downloadListStore)
 }
@@ -218,7 +208,7 @@ func (a *application) addNewDownload(url string) {
 func (a *application) unsetCurrentCollection() {
 	a.currentCollection = nil
 	a.mustRefreshDownloads()
-	expectResult(a.gtkBuilder.GetObject("pane_downloads")).(*gtk.Box).SetSensitive(false)
+	generic.Unwrap(a.gtkBuilder.GetObject("pane_downloads")).(*gtk.Box).SetSensitive(false)
 }
 
 func (a *application) setCurrentCollection(id database.RowID) {
@@ -229,7 +219,7 @@ func (a *application) setCurrentCollection(id database.RowID) {
 	//	a.collectionList.SelectRow(a.collectionList.GetRowAtIndex(index))
 	//}
 	a.mustRefreshDownloads()
-	expectResult(a.gtkBuilder.GetObject("pane_downloads")).(*gtk.Box).SetSensitive(true)
+	generic.Unwrap(a.gtkBuilder.GetObject("pane_downloads")).(*gtk.Box).SetSensitive(true)
 }
 
 type collection struct {
@@ -256,7 +246,7 @@ func (c *collection) addToListStore(store *gtk.ListStore, iter *gtk.TreeIter) {
 	if c.treeRef != nil {
 		panic("already added to list store")
 	}
-	c.treeRef = expectResult(gtk.TreeRowReferenceNew(store.ToTreeModel(), expectResult(store.GetPath(iter))))
+	c.treeRef = generic.Unwrap(gtk.TreeRowReferenceNew(store.ToTreeModel(), generic.Unwrap(store.GetPath(iter))))
 	c.updateView()
 }
 
@@ -268,9 +258,9 @@ func (c *collection) updateView() {
 		log.Println("tree row reference invalid")
 		c.treeRef = nil
 	} else {
-		model := expectResult(c.treeRef.GetModel())
-		iter := expectResult(model.ToTreeModel().GetIter(c.treeRef.GetPath()))
-		expect(model.(*gtk.ListStore).Set(
+		model := generic.Unwrap(c.treeRef.GetModel())
+		iter := generic.Unwrap(model.ToTreeModel().GetIter(c.treeRef.GetPath()))
+		generic.Unwrap_(model.(*gtk.ListStore).Set(
 			iter,
 			[]int{COLLECTION_COLUMN_ID, COLLECTION_COLUMN_NAME, COLLECTION_COLUMN_PATH},
 			[]interface{}{c.ID, c.Name, c.Path},
@@ -307,7 +297,7 @@ func (d *download) addToListStore(store *gtk.ListStore, iter *gtk.TreeIter) {
 	if d.treeRef != nil {
 		panic("already added to list store")
 	}
-	d.treeRef = expectResult(gtk.TreeRowReferenceNew(store.ToTreeModel(), expectResult(store.GetPath(iter))))
+	d.treeRef = generic.Unwrap(gtk.TreeRowReferenceNew(store.ToTreeModel(), generic.Unwrap(store.GetPath(iter))))
 	d.updateView()
 }
 
@@ -319,9 +309,9 @@ func (d *download) updateView() {
 		log.Println("tree row reference invalid")
 		d.treeRef = nil
 	} else {
-		model := expectResult(d.treeRef.GetModel())
-		iter := expectResult(model.ToTreeModel().GetIter(d.treeRef.GetPath()))
-		expect(model.(*gtk.ListStore).Set(
+		model := generic.Unwrap(d.treeRef.GetModel())
+		iter := generic.Unwrap(model.ToTreeModel().GetIter(d.treeRef.GetPath()))
+		generic.Unwrap_(model.(*gtk.ListStore).Set(
 			iter,
 			[]int{DOWNLOAD_COLUMN_ID, DOWNLOAD_COLUMN_URL, DOWNLOAD_COLUMN_ADDED, DOWNLOAD_COLUMN_STATE, DOWNLOAD_COLUMN_PROGRESS},
 			[]interface{}{d.ID, d.URL, d.Added.Format("2006-01-02 15:04:05"), d.State.String(), d.progress},
@@ -331,6 +321,6 @@ func (d *download) updateView() {
 
 func main() {
 	flag.Parse()
-	a := expectResult(newApplication())
+	a := generic.Unwrap(newApplication())
 	a.runWithArgsAndExit([]string{})
 }

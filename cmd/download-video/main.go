@@ -33,9 +33,7 @@ func main() {
 	logger.Sugar().Infof("Downloading from %s into %s", *source, *target)
 
 	registry := video_archiver.ProviderRegistry{}
-	if err := registry.Add(youtube.New()); err != nil {
-		logger.Sugar().Fatalf("error adding provider: %v", err)
-	}
+	generic.Expect_("error adding provider")(registry.Add(youtube.New()))
 
 	match, err := registry.Match(*source)
 	if err != nil {
@@ -48,7 +46,7 @@ func main() {
 	}
 
 	config := video_archiver.NewDownloadConfig()
-	targetPath := generic.UnwrapResult(config.GetTargetPath(match))
+	targetPath := generic.Unwrap(config.GetTargetPath(match))
 	logger.Sugar().Infof("Writing to %v", targetPath)
 
 	logger.Info("Starting download...")

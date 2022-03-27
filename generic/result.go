@@ -7,9 +7,14 @@ type Result[T any] struct {
 	Error error
 }
 
-// AsResult wraps a (T, error) return value from another function call as a Result[T].
-func AsResult[T any](value T, err error) Result[T] {
+// NewResult wraps a (T, error) return value from another function call as a Result[T].
+func NewResult[T any](value T, err error) Result[T] {
 	return Result[T]{Value: value, Error: err}
+}
+
+// NewResult_ is like NewResult, but for return values that are just an error.
+func NewResult_(err error) Result[Void] {
+	return NewResult(NewVoid(), err)
 }
 
 // Err transforms the Result[T] into an Option[error], either Some(Error) or None().
@@ -103,7 +108,26 @@ func Err[T any](err error) Result[T] {
 	return Result[T]{Error: err}
 }
 
-// UnwrapResult is a shortcut for AsResult(...).Unwrap().
-func UnwrapResult[T any](value T, err error) T {
-	return AsResult(value, err).Unwrap()
+// Expect is a shortcut for NewResult(...).Expect(msg); call it as Expect(msg)(...).
+func Expect[T any](msg string) func(T, error) T {
+	return func(value T, err error) T {
+		return NewResult(value, err).Expect(msg)
+	}
+}
+
+// Expect_ is like Expect, but for return values that are just an error.
+func Expect_(msg string) func(error) {
+	return func(err error) {
+		NewResult_(err).Expect(msg)
+	}
+}
+
+// Unwrap is a shortcut for NewResult(...).Unwrap().
+func Unwrap[T any](value T, err error) T {
+	return NewResult(value, err).Unwrap()
+}
+
+// Unwrap_ is like Unwrap, but for return values that are just an error.
+func Unwrap_(err error) {
+	NewResult(NewVoid(), err).Unwrap()
 }
