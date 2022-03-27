@@ -3,93 +3,68 @@ package youtube
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/url"
 	"strings"
 
 	"github.com/kkdai/youtube/v2"
-	"github.com/schollz/progressbar/v3"
 
 	"github.com/alanbriolat/video-archiver"
-	"github.com/alanbriolat/video-archiver/download"
 	"github.com/alanbriolat/video-archiver/generic"
 )
 
-type sourceInfo struct {
+type source struct {
+	videoID string
+}
+
+type resolvedSource struct {
+	source
 	videoDetails *youtube.Video
 	videoFormat  *youtube.Format
 }
 
-func (i *sourceInfo) ID() string {
-	return i.videoDetails.ID
-}
-
-func (i *sourceInfo) Title() string {
-	return i.videoDetails.Title
-}
-
-func (i *sourceInfo) Ext() string {
-	mimeType := strings.SplitN(i.videoFormat.MimeType, ";", 2)[0]
-	parts := strings.SplitN(mimeType, "/", 2)
-	return parts[1]
-}
-
-type Source struct {
-	videoID string
-	info    *sourceInfo
-}
-
-func (s *Source) URL() string {
+func (s *source) URL() string {
 	return fmt.Sprintf("https://www.youtube.com/watch?v=%s", s.videoID)
 }
 
-func (s *Source) Info() video_archiver.SourceInfo {
-	if s.info == nil {
-		return nil
-	} else {
-		return s.info
-	}
+func (s *source) String() string {
+	return s.URL()
 }
 
-func (s *Source) Recon(ctx context.Context) error {
+func (s *source) Recon(ctx context.Context) (video_archiver.ResolvedSource, error) {
 	client := youtube.Client{}
 	videoDetails, err := client.GetVideoContext(ctx, s.URL())
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to get video info: %w", err)
 	}
 	// TODO: select "highest" quality
 	formats := videoDetails.Formats.WithAudioChannels()
 	videoFormat := &formats[0]
-	s.info = &sourceInfo{videoDetails, videoFormat}
-	return nil
+	return &resolvedSource{
+		source:       *s,
+		videoDetails: videoDetails,
+		videoFormat:  videoFormat,
+	}, nil
 }
 
-func (s *Source) Download(ctx context.Context, state *download.DownloadState) error {
-	if s.info == nil {
-		return fmt.Errorf("must call Recon() first")
-	}
-
-	tempFile, err := state.CreateTemp("download-*")
-	if err != nil {
-		return err
-	}
-	defer tempFile.Close()
-
+func (s *resolvedSource) Download(d video_archiver.Download) error {
 	client := youtube.Client{}
-	stream, size, err := client.GetStream(s.info.videoDetails, s.info.videoFormat)
+	stream, size, err := client.GetStreamContext(d.Context(), s.videoDetails, s.videoFormat)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get stream: %w", err)
 	}
 	defer stream.Close()
+	d.AddExpectedBytes(int(size))
+	return d.SaveStream(s.getFilename(), stream)
+}
 
-	// TODO: eliminate this code duplication
-	bar := progressbar.DefaultBytes(size, "downloading")
-	_, err = io.Copy(io.MultiWriter(tempFile, bar), stream)
-	if err != nil {
-		return err
-	}
+func (s *resolvedSource) String() string {
+	return fmt.Sprintf("%s [%s]", s.videoDetails.Title, s.videoDetails.ID)
+}
 
-	return nil
+func (s *resolvedSource) getFilename() string {
+	mimeType := strings.SplitN(s.videoFormat.MimeType, ";", 2)[0]
+	ext := strings.SplitN(mimeType, "/", 2)[1]
+	return strings.Join([]string{s.videoDetails.Title, s.videoDetails.ID, ext}, ".")
 }
 
 func Match(s string) (video_archiver.Source, error) {
@@ -98,7 +73,7 @@ func Match(s string) (video_archiver.Source, error) {
 	} else if videoID, err := extractVideoID(parsedURL); err != nil {
 		return nil, err
 	} else {
-		return &Source{videoID: *videoID}, nil
+		return &source{videoID: *videoID}, nil
 	}
 }
 
@@ -139,5 +114,5 @@ func extractVideoID(url *url.URL) (*string, error) {
 }
 
 func init() {
-	generic.Unwrap_(video_archiver.DefaultProviderRegistry.Create("youtube", Match))
+	generic.Unwrap_(video_archiver.DefaultProviderRegistry.Add(New()))
 }

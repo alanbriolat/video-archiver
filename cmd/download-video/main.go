@@ -4,11 +4,12 @@ import (
 	"context"
 	"flag"
 	"log"
+	"strings"
 
+	"github.com/schollz/progressbar/v3"
 	"go.uber.org/zap"
 
 	"github.com/alanbriolat/video-archiver"
-	"github.com/alanbriolat/video-archiver/download"
 	"github.com/alanbriolat/video-archiver/generic"
 	_ "github.com/alanbriolat/video-archiver/provider/raw"
 	_ "github.com/alanbriolat/video-archiver/provider/youtube"
@@ -21,6 +22,7 @@ func main() {
 	}
 	defer logger.Sync()
 
+	// TODO: use the cancel on ctrl+c
 	ctx, _ := context.WithCancel(video_archiver.WithLogger(context.Background(), logger))
 
 	source := flag.String("source", "", "URL to the video page")
@@ -39,22 +41,28 @@ func main() {
 	}
 
 	logger.Info("Starting recon...")
-	if err := match.Source.Recon(ctx); err != nil {
+	resolved, err := match.Source.Recon(ctx)
+	if err != nil {
 		logger.Sugar().Fatalf("Recon failed: %v", err)
 	}
 
-	config := video_archiver.NewDownloadConfig()
-	targetPath := generic.Unwrap(config.GetTargetPath(match))
-	logger.Sugar().Infof("Writing to %v", targetPath)
-
 	logger.Info("Starting download...")
-	err = download.WithDownloadState(
-		func(state *download.DownloadState) error {
-			return match.Source.Download(ctx, state)
-		},
-		download.WithTargetDir(*target),
-	)
+	bar := progressbar.DefaultBytes(1, "downloading")
+	downloadBuilder := video_archiver.NewDownloadBuilder()
+	downloadBuilder.WithContext(ctx)
+	downloadBuilder.WithProgressCallback(func(downloaded int, expected int) {
+		if bar.GetMax() != expected {
+			bar.ChangeMax(expected)
+		}
+		generic.Unwrap_(bar.Set(downloaded))
+	})
+	downloadBuilder.WithTargetPrefix(strings.TrimRight(*target, "/") + "/")
+	download := generic.Unwrap(downloadBuilder.Build())
+	defer download.Close()
+
+	err = resolved.Download(download)
 	if err != nil {
 		logger.Sugar().Fatalf("Download failed: %v", err)
 	}
+	logger.Info("Download complete!")
 }

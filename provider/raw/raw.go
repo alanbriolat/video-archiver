@@ -3,15 +3,11 @@ package raw
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
 
-	"github.com/schollz/progressbar/v3"
-
 	"github.com/alanbriolat/video-archiver"
-	"github.com/alanbriolat/video-archiver/download"
 	"github.com/alanbriolat/video-archiver/generic"
 )
 
@@ -60,12 +56,8 @@ func (c *Config) Match(s string) (video_archiver.Source, error) {
 		return nil, fmt.Errorf("unknown file extension %v", extension)
 	}
 	res := source{
-		url: s,
-		info: &sourceInfo{
-			id:    "",
-			title: strings.Join(filenameParts[:len(filenameParts)-1], "."),
-			ext:   extension,
-		},
+		url:      s,
+		filename: filename,
 	}
 	return &res, nil
 }
@@ -77,54 +69,27 @@ func (c Config) Provider() video_archiver.Provider {
 	}
 }
 
-type sourceInfo struct {
-	id    string
-	title string
-	ext   string
-}
-
-func (i *sourceInfo) ID() string {
-	return i.id
-}
-
-func (i *sourceInfo) Title() string {
-	return i.title
-}
-
-func (i *sourceInfo) Ext() string {
-	return i.ext
-}
-
 type source struct {
-	url  string
-	info *sourceInfo
+	url      string
+	filename string
 }
 
 func (s *source) URL() string {
 	return s.url
 }
 
-func (s *source) Info() video_archiver.SourceInfo {
-	return s.info
+func (s *source) String() string {
+	return s.URL()
 }
 
-func (s *source) Recon(ctx context.Context) error {
-	return nil
+func (s *source) Recon(ctx context.Context) (video_archiver.ResolvedSource, error) {
+	return s, nil
 }
 
-func (s *source) Download(ctx context.Context, state *download.DownloadState) error {
-	if s.info == nil {
-		return fmt.Errorf("must call Recon() first")
-	}
-
-	tempFile, err := state.CreateTemp("download-")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer tempFile.Close()
-
+func (s *source) Download(d video_archiver.Download) error {
+	// TODO: handle HTTP client inside Download?
 	client := &http.Client{}
-	req, err := http.NewRequestWithContext(ctx, "GET", s.url, nil)
+	req, err := http.NewRequestWithContext(d.Context(), "GET", s.url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -134,14 +99,8 @@ func (s *source) Download(ctx context.Context, state *download.DownloadState) er
 	}
 	defer resp.Body.Close()
 
-	// TODO: eliminate this code duplication
-	bar := progressbar.DefaultBytes(resp.ContentLength, "downloading")
-	_, err = io.Copy(io.MultiWriter(tempFile, bar), resp.Body)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	d.AddExpectedBytes(int(resp.ContentLength))
+	return d.SaveStream(s.filename, resp.Body)
 }
 
 func init() {
