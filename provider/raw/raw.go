@@ -99,14 +99,14 @@ func (s *source) Download(d video_archiver.Download) error {
 	}
 	defer resp.Body.Close()
 
+	// TODO: check content type headers etc.
+
 	d.AddExpectedBytes(int(resp.ContentLength))
 	return d.SaveStream(s.filename, resp.Body)
 }
 
 func init() {
-	generic.Unwrap_(
-		video_archiver.DefaultProviderRegistry.Add(
-			NewConfig().Provider().WithPriority(video_archiver.PriorityLowest),
-		),
+	video_archiver.DefaultProviderRegistry.MustAdd(
+		NewConfig().Provider().WithPriority(video_archiver.PriorityLowest),
 	)
 }

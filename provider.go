@@ -4,6 +4,8 @@ import (
 	"errors"
 	"math"
 	"sort"
+
+	"github.com/alanbriolat/video-archiver/generic"
 )
 
 var (
@@ -20,10 +22,12 @@ var (
 	PriorityLowest  int16 = math.MaxInt16
 )
 
+type MatchFunc = func(string) (Source, error)
+
 // A Provider matches any URL it knows how to handle, giving a Source that can be used to download the video.
 type Provider struct {
 	Name  string
-	Match func(string) (Source, error)
+	Match MatchFunc
 	// Priority of the matcher, lower (including negative) means matching earlier.
 	Priority int16
 }
@@ -69,7 +73,7 @@ func (r *ProviderRegistry) Add(p Provider) error {
 }
 
 // Create is a shortcut for Add(Provider{Name: ..., Match: ...}).
-func (r *ProviderRegistry) Create(name string, f func(string) (Source, error)) error {
+func (r *ProviderRegistry) Create(name string, f MatchFunc) error {
 	return r.Add(Provider{
 		Name:  name,
 		Match: f,
@@ -77,32 +81,12 @@ func (r *ProviderRegistry) Create(name string, f func(string) (Source, error)) e
 }
 
 // CreatePriority is a shortcut for Add(Provider{Name: ..., Match: ..., Priority: ...}).
-func (r *ProviderRegistry) CreatePriority(name string, f func(string) (Source, error), priority int16) error {
+func (r *ProviderRegistry) CreatePriority(name string, f MatchFunc, priority int16) error {
 	return r.Add(Provider{
 		Name:     name,
 		Match:    f,
 		Priority: priority,
 	})
-}
-
-// SetPriority adjust the priority of a named Provider.
-func (r *ProviderRegistry) SetPriority(name string, priority int16) error {
-	if p, ok := r.providerMap[name]; ok {
-		p.Priority = priority
-		r.sortByPriority()
-		return nil
-	} else {
-		return ErrUnknownProvider
-	}
-}
-
-// List returns the names of registered providers in priority order.
-func (r *ProviderRegistry) List() []string {
-	names := make([]string, 0, len(r.providers))
-	for _, p := range r.providers {
-		names = append(names, p.Name)
-	}
-	return names
 }
 
 // GetPriority gets the priority of the named Provider. If ErrUnknownProvider is returned, the returned priority is the
@@ -113,6 +97,15 @@ func (r *ProviderRegistry) GetPriority(name string) (int16, error) {
 	} else {
 		return 0, ErrUnknownProvider
 	}
+}
+
+// List returns the names of registered providers in priority order.
+func (r *ProviderRegistry) List() []string {
+	names := make([]string, 0, len(r.providers))
+	for _, p := range r.providers {
+		names = append(names, p.Name)
+	}
+	return names
 }
 
 // Match a string against each Provider in priority order, or return ErrNoMatch.
@@ -143,6 +136,32 @@ func (r *ProviderRegistry) MatchWith(name string, s string) (*Match, error) {
 		}
 	} else {
 		return nil, ErrUnknownProvider
+	}
+}
+
+// MustAdd wraps Add but panics if there is an error.
+func (r *ProviderRegistry) MustAdd(p Provider) {
+	generic.Unwrap_(r.Add(p))
+}
+
+// MustCreate wraps Create but panics if there is an error.
+func (r *ProviderRegistry) MustCreate(name string, f MatchFunc) {
+	generic.Unwrap_(r.Create(name, f))
+}
+
+// MustCreatePriority wraps CreatePriority but panics if there is an error.
+func (r *ProviderRegistry) MustCreatePriority(name string, f MatchFunc, priority int16) {
+	generic.Unwrap_(r.CreatePriority(name, f, priority))
+}
+
+// SetPriority adjust the priority of a named Provider.
+func (r *ProviderRegistry) SetPriority(name string, priority int16) error {
+	if p, ok := r.providerMap[name]; ok {
+		p.Priority = priority
+		r.sortByPriority()
+		return nil
+	} else {
+		return ErrUnknownProvider
 	}
 }
 

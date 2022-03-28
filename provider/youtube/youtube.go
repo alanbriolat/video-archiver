@@ -9,17 +9,10 @@ import (
 	"github.com/kkdai/youtube/v2"
 
 	"github.com/alanbriolat/video-archiver"
-	"github.com/alanbriolat/video-archiver/generic"
 )
 
 type source struct {
 	videoID string
-}
-
-type resolvedSource struct {
-	source
-	videoDetails *youtube.Video
-	videoFormat  *youtube.Format
 }
 
 func (s *source) URL() string {
@@ -44,6 +37,12 @@ func (s *source) Recon(ctx context.Context) (video_archiver.ResolvedSource, erro
 		videoDetails: videoDetails,
 		videoFormat:  videoFormat,
 	}, nil
+}
+
+type resolvedSource struct {
+	source
+	videoDetails *youtube.Video
+	videoFormat  *youtube.Format
 }
 
 func (s *resolvedSource) Download(d video_archiver.Download) error {
@@ -114,5 +113,5 @@ func extractVideoID(url *url.URL) (*string, error) {
 }
 
 func init() {
-	generic.Unwrap_(video_archiver.DefaultProviderRegistry.Add(New()))
+	video_archiver.DefaultProviderRegistry.MustAdd(New())
 }
