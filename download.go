@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -25,13 +26,19 @@ type Download interface {
 	// Context is the cancellable context of this Download.
 	Context() context.Context
 
-	CreateFile(filename string) (io.ReadWriteCloser, error)
+	CreateFile(filename string) (io.WriteCloser, error)
 
 	// Progress returns the downloaded and expected bytes of the download.
 	Progress() (int, int)
 
+	// SaveHTTPRequest will execute the http.Request with Context() and then download the resulting stream like SaveStream.
+	SaveHTTPRequest(filename string, req *http.Request) error
+
 	// SaveStream will download the stream to the named file, calling AddDownloadedBytes as necessary.
 	SaveStream(filename string, stream io.Reader) error
+
+	// SaveURL will make a GET request to the URL and then download the resulting stream like SaveStream.
+	SaveURL(filename string, url string) error
 
 	// TempSaveStream is like SaveStream, but writing to a temporary file.
 	//TempSaveStream(filename string, stream io.Reader) error
@@ -80,7 +87,7 @@ func (d *download) Context() context.Context {
 	return d.ctx
 }
 
-func (d *download) CreateFile(filename string) (io.ReadWriteCloser, error) {
+func (d *download) CreateFile(filename string) (io.WriteCloser, error) {
 	targetPath := d.targetPath(filename)
 	targetDir := path.Dir(targetPath)
 	if err := os.MkdirAll(targetDir, 0775); err != nil {
@@ -91,6 +98,21 @@ func (d *download) CreateFile(filename string) (io.ReadWriteCloser, error) {
 
 func (d *download) Progress() (int, int) {
 	return d.downloadedBytes, d.expectedBytes
+}
+
+func (d *download) SaveHTTPRequest(filename string, req *http.Request) error {
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	req = req.WithContext(d.Context())
+	client := http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+	defer resp.Body.Close()
+	d.AddExpectedBytes(int(resp.ContentLength))
+	return d.SaveStream(filename, resp.Body)
 }
 
 func (d *download) SaveStream(filename string, stream io.Reader) error {
@@ -106,6 +128,14 @@ func (d *download) SaveStream(filename string, stream io.Reader) error {
 		return fmt.Errorf("failed to save stream: %w", err)
 	}
 	return nil
+}
+
+func (d *download) SaveURL(filename string, url string) error {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	return d.SaveHTTPRequest(filename, req)
 }
 
 //func (d *download) TempSaveStream(pattern string, stream io.Reader) (string, error) {

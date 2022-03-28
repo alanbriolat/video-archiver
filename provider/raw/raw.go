@@ -3,7 +3,6 @@ package raw
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 	"path"
 
@@ -87,22 +86,7 @@ func (s *source) Recon(ctx context.Context) (video_archiver.ResolvedSource, erro
 }
 
 func (s *source) Download(d video_archiver.Download) error {
-	// TODO: handle HTTP client inside Download?
-	client := &http.Client{}
-	req, err := http.NewRequestWithContext(d.Context(), "GET", s.url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("download failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// TODO: check content type headers etc.
-
-	d.AddExpectedBytes(int(resp.ContentLength))
-	return d.SaveStream(s.filename, resp.Body)
+	return d.SaveURL(s.filename, s.url)
 }
 
 func init() {
