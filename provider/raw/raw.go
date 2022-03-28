@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
+	"path"
 
 	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/generic"
+	"github.com/alanbriolat/video-archiver/util"
 )
 
 type Config struct {
@@ -42,16 +43,15 @@ func (c *Config) Match(s string) (video_archiver.Source, error) {
 	if !c.Protocols.Contains(parsedURL.Scheme) {
 		return nil, fmt.Errorf("unknown URL scheme %v", parsedURL.Scheme)
 	}
-	// Attempt to extract file extension
-	// TODO: could maybe fall back to doing a HEAD request at Recon() time?
-	path := strings.TrimRight(parsedURL.Path, "/")
-	pathElements := strings.Split(path, "/")
-	filename := pathElements[len(pathElements)-1]
-	filenameParts := strings.Split(filename, ".")
-	if len(filenameParts) < 2 {
+	// Attempt to extract filename and extension
+	filename, err := util.FilenameFromURL(parsedURL)
+	if err != nil {
+		return nil, err
+	}
+	extension := path.Ext(filename)
+	if extension == "" {
 		return nil, fmt.Errorf("no file extension found")
 	}
-	extension := filenameParts[len(filenameParts)-1]
 	if !c.Extensions.Contains(extension) {
 		return nil, fmt.Errorf("unknown file extension %v", extension)
 	}
