@@ -19,6 +19,13 @@ build-windows:
 	$(MAKE) build PATH="$(MINGW64_BIN):$(PATH)" GOROOT="$(GOROOT)"
 	# Copy dependency DLLs
 	PATH="./bin:$(MINGW64_BIN):$(PATH)" ldd ./bin/video-archiver.exe | grep "$(MINGW64_BIN)" | cut -f 3 -d ' ' | xargs -r cp -v -t ./bin/
+	# Copy GTK theme and settings for selecting that theme
+	mkdir -p ./bin/share/themes/Windows10/
+	cp -r resources/themes/Windows-10/gtk-3.20 ./bin/share/themes/Windows10/gtk-3.0
+	mkdir -p ./bin/etc/gtk-3.0/
+	cp resources/gtk-settings.ini ./bin/etc/gtk-3.0/settings.ini
+	mkdir -p ./bin/share/glib-2.0/schemas
+	$(MINGW64_BIN)/glib-compile-schemas ./bin/share/glib-2.0/schemas
 
 .PHONY: fmt
 fmt:

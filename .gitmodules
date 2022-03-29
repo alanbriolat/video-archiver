@@ -1,0 +1,3 @@
+[submodule "resources/themes/Windows-10"]
+	path = resources/themes/Windows-10
+	url = https://github.com/B00merang-Project/Windows-10
