@@ -1,3 +1,10 @@
+UNAME := $(shell uname -o)
+
+ifeq ($(UNAME), Msys)
+MINGW64_BIN ?= /mingw64/bin
+GOROOT ?= /c/msys64/mingw64/lib/go
+endif
+
 .PHONY: all
 all: build
 
@@ -9,7 +16,9 @@ build:
 
 .PHONY: build-windows
 build-windows:
-	$(MAKE) build PATH="/mingw54/bin:$(PATH)" GOROOT="/c/msys64/mingw64/lib/go"
+	$(MAKE) build PATH="$(MINGW64_BIN):$(PATH)" GOROOT="$(GOROOT)"
+	# Copy dependency DLLs
+	PATH="./bin:$(MINGW64_BIN):$(PATH)" ldd ./bin/video-archiver.exe | grep "$(MINGW64_BIN)" | cut -f 3 -d ' ' | xargs -r cp -v -t ./bin/
 
 .PHONY: fmt
 fmt:
