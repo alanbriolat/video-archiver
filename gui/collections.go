@@ -22,7 +22,8 @@ type collectionManager struct {
 	collections map[database.RowID]*collection
 	current     *collection
 
-	actionNew *glib.SimpleAction
+	actionNew    *glib.SimpleAction
+	actionDelete *glib.SimpleAction
 
 	store     *gtk.ListStore
 	view      *gtk.TreeView
@@ -40,6 +41,8 @@ func newCollectionManager(app *application, builder *gtk.Builder) *collectionMan
 	}
 
 	m.actionNew = m.app.registerSimpleWindowAction("new_collection", nil, m.onNewButtonClicked)
+	m.actionDelete = m.app.registerSimpleWindowAction("delete_collection", nil, m.onDeleteButtonClicked)
+	m.actionDelete.SetEnabled(false)
 
 	// Get widget references from the builder
 	m.store = generic.Unwrap(builder.GetObject("list_store_collections")).(*gtk.ListStore)
@@ -80,6 +83,15 @@ func (m *collectionManager) onNewButtonClicked() {
 	}
 }
 
+func (m *collectionManager) onDeleteButtonClicked() {
+	if !m.app.runWarningDialog("Are you sure you want to delete the collection \"%s\"?", m.current.Name) {
+		return
+	}
+	generic.Unwrap_(m.app.database.DeleteCollection(m.current.ID))
+	generic.Unwrap_(m.current.removeFromStore())
+	m.selection.UnselectAll()
+}
+
 func (m *collectionManager) create(dbCollection *database.Collection) {
 	generic.Unwrap_(m.app.database.InsertCollection(dbCollection))
 	c := &collection{Collection: *dbCollection}
@@ -96,6 +108,7 @@ func (m *collectionManager) setCurrent(id database.RowID) {
 		return
 	}
 	m.current = m.collections[id]
+	m.actionDelete.SetEnabled(true)
 	if m.OnCurrentChanged != nil {
 		m.OnCurrentChanged(m.current)
 	}
@@ -106,6 +119,7 @@ func (m *collectionManager) unsetCurrent() {
 		return
 	}
 	m.current = nil
+	m.actionDelete.SetEnabled(false)
 	if m.OnCurrentChanged != nil {
 		m.OnCurrentChanged(m.current)
 	}
@@ -126,6 +140,19 @@ func (c *collection) addToStore(store *gtk.ListStore) error {
 	} else {
 		c.treeRef = treeRef
 		return c.updateView()
+	}
+}
+
+func (c *collection) removeFromStore() error {
+	if c.treeRef == nil {
+		return fmt.Errorf("collection not in store")
+	} else if model, err := c.treeRef.GetModel(); err != nil {
+		return fmt.Errorf("failed to get view model: %w", err)
+	} else if iter, err := model.ToTreeModel().GetIter(c.treeRef.GetPath()); err != nil {
+		return fmt.Errorf("failed to get store iter: %w", err)
+	} else {
+		model.(*gtk.ListStore).Remove(iter)
+		return nil
 	}
 }
 

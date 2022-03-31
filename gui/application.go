@@ -107,6 +107,14 @@ func (a *application) registerSimpleWindowAction(name string, parameterType *gli
 	return action
 }
 
+// runWarningDialog will show a modal warning dialog with "OK" and "Cancel" buttons, returning true if "OK" was clicked.
+func (a *application) runWarningDialog(format string, args ...interface{}) bool {
+	dlg := gtk.MessageDialogNew(a.window, gtk.DIALOG_MODAL, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK_CANCEL, format, args...)
+	defer dlg.Destroy()
+	response := dlg.Run()
+	return response == gtk.RESPONSE_OK
+}
+
 func Main() {
 	flag.Parse()
 	a := generic.Unwrap(newApplication())

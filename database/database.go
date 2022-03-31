@@ -2,6 +2,7 @@ package database
 
 import (
 	"embed"
+	"fmt"
 	"log"
 	"time"
 
@@ -88,6 +89,22 @@ func (d *Database) InsertCollection(c *Collection) error {
 // RefreshCollection will reload the collection information from the database.
 func (d *Database) RefreshCollection(c *Collection) error {
 	return d.db.Get(c, `SELECT * FROM collection WHERE rowid = ?`, c.ID)
+}
+
+// DeleteCollection will delete the collection and all its downloads.
+func (d *Database) DeleteCollection(id RowID) error {
+	tx := d.db.MustBegin()
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM download WHERE collection_id = ?`, id); err != nil {
+		return fmt.Errorf("failed to delete downloads: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM collection WHERE rowid = ?`, id); err != nil {
+		return fmt.Errorf("failed to delete collection: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit: %w", err)
+	}
+	return nil
 }
 
 // InsertDownload will add a new download to the database, overwriting any auto-generated attributes with those from the database.
