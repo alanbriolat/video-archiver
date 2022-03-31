@@ -3,6 +3,7 @@ package gui
 import (
 	"fmt"
 
+	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 
 	"github.com/alanbriolat/video-archiver/database"
@@ -21,10 +22,11 @@ type collectionManager struct {
 	collections map[database.RowID]*collection
 	current     *collection
 
+	actionNew *glib.SimpleAction
+
 	store     *gtk.ListStore
 	view      *gtk.TreeView
 	selection *gtk.TreeSelection
-	btnNew    *gtk.Button
 
 	dlgCreate *collectionCreationDialog
 
@@ -37,16 +39,16 @@ func newCollectionManager(app *application, builder *gtk.Builder) *collectionMan
 		collections: make(map[database.RowID]*collection),
 	}
 
+	m.actionNew = m.app.registerSimpleWindowAction("new_collection", nil, m.onNewButtonClicked)
+
 	// Get widget references from the builder
 	m.store = generic.Unwrap(builder.GetObject("list_store_collections")).(*gtk.ListStore)
 	m.view = generic.Unwrap(builder.GetObject("tree_collections")).(*gtk.TreeView)
 	m.selection = generic.Unwrap(m.view.GetSelection())
-	m.btnNew = generic.Unwrap(builder.GetObject("btn_new_collection")).(*gtk.Button)
 	m.dlgCreate = newCollectionCreationDialog(builder)
 
 	m.selection.SetMode(gtk.SELECTION_SINGLE)
 	m.selection.Connect("changed", m.onViewSelectionChanged)
-	m.btnNew.Connect("clicked", m.onNewButtonClicked)
 
 	return m
 }
@@ -130,8 +132,6 @@ func (c *collection) addToStore(store *gtk.ListStore) error {
 func (c *collection) updateView() error {
 	if c.treeRef == nil {
 		return fmt.Errorf("collection not in view")
-	} else if !c.treeRef.Valid() {
-		return fmt.Errorf("collection view reference invalid")
 	} else if model, err := c.treeRef.GetModel(); err != nil {
 		return fmt.Errorf("failed to get view model: %w", err)
 	} else if iter, err := model.ToTreeModel().GetIter(c.treeRef.GetPath()); err != nil {

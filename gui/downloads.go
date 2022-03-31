@@ -24,12 +24,13 @@ type downloadManager struct {
 	downloads  map[database.RowID]*download
 	current    *download
 
-	store       *gtk.ListStore
-	view        *gtk.TreeView
-	selection   *gtk.TreeSelection
-	pane        *gtk.Box
-	btnNew      *gtk.Button
-	entryNewURL *gtk.Entry
+	store         *gtk.ListStore
+	view          *gtk.TreeView
+	selection     *gtk.TreeSelection
+	paneDownloads *gtk.Widget
+	paneDetails   *gtk.Widget
+	btnNew        *gtk.Button
+	entryNewURL   *gtk.Entry
 
 	OnCurrentChanged func(*download)
 }
@@ -44,13 +45,15 @@ func newDownloadManager(app *application, builder *gtk.Builder) *downloadManager
 	m.store = generic.Unwrap(builder.GetObject("list_store_downloads")).(*gtk.ListStore)
 	m.view = generic.Unwrap(builder.GetObject("tree_downloads")).(*gtk.TreeView)
 	m.selection = generic.Unwrap(m.view.GetSelection())
-	m.pane = generic.Unwrap(builder.GetObject("pane_downloads")).(*gtk.Box)
+	m.paneDownloads = generic.Unwrap(builder.GetObject("pane_downloads")).(gtk.IWidget).ToWidget()
+	m.paneDetails = generic.Unwrap(builder.GetObject("pane_download_details")).(gtk.IWidget).ToWidget()
 	m.btnNew = generic.Unwrap(builder.GetObject("btn_new_download")).(*gtk.Button)
 	m.entryNewURL = generic.Unwrap(builder.GetObject("entry_new_download_url")).(*gtk.Entry)
 
 	m.selection.SetMode(gtk.SELECTION_SINGLE)
 	m.selection.Connect("changed", m.onViewSelectionChanged)
-	m.pane.SetSensitive(false)
+	m.paneDownloads.SetVisible(false)
+	m.paneDetails.SetVisible(false)
 	m.btnNew.Connect("clicked", m.onNewButtonClicked)
 
 	return m
@@ -99,7 +102,7 @@ func (m *downloadManager) setCollection(c *collection) {
 		return
 	}
 	m.collection = c
-	m.pane.SetSensitive(m.collection != nil)
+	m.paneDownloads.SetVisible(m.collection != nil)
 	m.mustRefresh()
 }
 
@@ -147,8 +150,6 @@ func (d *download) addToStore(store *gtk.ListStore) error {
 func (d *download) updateView() error {
 	if d.treeRef == nil {
 		return fmt.Errorf("download not in view")
-	} else if !d.treeRef.Valid() {
-		return fmt.Errorf("download view reference invalid")
 	} else if model, err := d.treeRef.GetModel(); err != nil {
 		return fmt.Errorf("failed to get view model: %w", err)
 	} else if iter, err := model.ToTreeModel().GetIter(d.treeRef.GetPath()); err != nil {

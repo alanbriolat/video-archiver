@@ -27,7 +27,7 @@ type application struct {
 	collections    *collectionManager
 	downloads      *downloadManager
 	gtkApplication *gtk.Application
-	window         *gtk.Window
+	window         *gtk.ApplicationWindow
 }
 
 func newApplication() (*application, error) {
@@ -78,9 +78,8 @@ func (a *application) onActivate() {
 	log.Println("application activate")
 
 	builder := generic.Unwrap(gtk.BuilderNewFromString(glade))
-	a.window = generic.Unwrap(builder.GetObject("window_main")).(*gtk.Window)
-	a.window.Show()
-	a.gtkApplication.AddWindow(a.window)
+	a.window = generic.Unwrap(builder.GetObject("window_main")).(*gtk.ApplicationWindow)
+	a.window.SetApplication(a.gtkApplication)
 
 	a.downloads = newDownloadManager(a, builder)
 	a.downloads.OnCurrentChanged = func(d *download) {
@@ -92,12 +91,20 @@ func (a *application) onActivate() {
 		a.downloads.setCollection(c)
 	}
 
+	a.window.Show()
 	a.collections.mustRefresh()
 }
 
 func (a *application) onShutdown() {
 	log.Println("application shutdown")
 	a.database.Close()
+}
+
+func (a *application) registerSimpleWindowAction(name string, parameterType *glib.VariantType, f func()) *glib.SimpleAction {
+	action := glib.SimpleActionNew(name, parameterType)
+	action.Connect("activate", f)
+	a.window.AddAction(action)
+	return action
 }
 
 func Main() {
