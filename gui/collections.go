@@ -2,6 +2,7 @@ package gui
 
 import (
 	"fmt"
+	"path"
 
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
@@ -182,34 +183,48 @@ func (c *collection) String() string {
 }
 
 type collectionCreationDialog struct {
-	dialog *gtk.Dialog
+	dialog *gtk.FileChooserDialog
 	name   *gtk.Entry
 	path   *gtk.FileChooserButton
 }
 
 func newCollectionCreationDialog(builder *gtk.Builder) *collectionCreationDialog {
 	d := &collectionCreationDialog{}
-	d.dialog = generic.Unwrap(builder.GetObject("dialog_new_collection")).(*gtk.Dialog)
+	d.dialog = generic.Unwrap(builder.GetObject("dialog_new_collection")).(*gtk.FileChooserDialog)
 	d.name = generic.Unwrap(builder.GetObject("entry_new_collection_name")).(*gtk.Entry)
-	d.path = generic.Unwrap(builder.GetObject("choose_new_collection_path")).(*gtk.FileChooserButton)
+	// If user hasn't customised the collection name, they'll see placeholder, which will follow selected directory name
+	d.dialog.Connect("selection-changed", func(fileChooser *gtk.FileChooserDialog) {
+		dirPath := fileChooser.GetFilename()
+		var dirName string
+		if dirPath == "" {
+			dirName = ""
+		} else {
+			dirName = path.Base(dirPath)
+		}
+		d.name.SetPlaceholderText(dirName)
+	})
+	// If user gives focus to collection name entry that is showing placeholder, copy the placeholder before editing
+	d.name.Connect("focus-in-event", func() {
+		if generic.Unwrap(d.name.GetText()) == "" {
+			d.name.SetText(generic.Unwrap(d.name.GetPlaceholderText()))
+		}
+	})
 	return d
 }
 
 func (d *collectionCreationDialog) run() (new *database.Collection) {
 	// Clear from any previous use
+	d.dialog.UnselectAll()
 	d.name.SetText("")
-	d.path.UnselectAll()
+	d.name.SetPlaceholderText("")
 	// Show it to the user
-	d.name.GrabFocus()
 	d.dialog.ShowAll()
 
 	// TODO: do this in a loop, with some validation
 	if response := d.dialog.Run(); response == gtk.RESPONSE_OK {
-		name := generic.Unwrap(d.name.GetText())
-		path := d.path.GetFilename()
 		new = &database.Collection{
-			Name: name,
-			Path: path,
+			Name: d.getName(),
+			Path: d.getPath(),
 		}
 	} else {
 		// Doesn't set `new`, so returns nil
@@ -218,4 +233,18 @@ func (d *collectionCreationDialog) run() (new *database.Collection) {
 	// All done, hide it
 	d.dialog.Hide()
 	return new
+}
+
+func (d *collectionCreationDialog) getPath() string {
+	return d.dialog.GetFilename()
+}
+
+// getName gets the intended collection name, which is either a value entered by the user or the placeholder populated
+// from the selected directory name.
+func (d *collectionCreationDialog) getName() string {
+	if name := generic.Unwrap(d.name.GetText()); name != "" {
+		return name
+	} else {
+		return generic.Unwrap(d.name.GetPlaceholderText())
+	}
 }
