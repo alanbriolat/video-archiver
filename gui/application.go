@@ -74,7 +74,7 @@ func (a *application) onStartup() {
 func (a *application) onActivate() {
 	log.Println("application activate")
 
-	builder := MustNewBuilder("main.glade")
+	builder := MustNewBuilder("application.glade")
 	MustReadObject(&a.window, builder, "window_main")
 	a.window.SetApplication(a.gtkApplication)
 
