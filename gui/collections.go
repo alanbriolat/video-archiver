@@ -47,8 +47,8 @@ func newCollectionManager(app *application, builder *gtk.Builder) *collectionMan
 	m.actionDelete.SetEnabled(false)
 
 	// Get widget references from the builder
-	m.store = generic.Unwrap(builder.GetObject("list_store_collections")).(*gtk.ListStore)
-	m.view = generic.Unwrap(builder.GetObject("tree_collections")).(*gtk.TreeView)
+	MustReadObject(&m.store, builder, "list_store_collections")
+	MustReadObject(&m.view, builder, "tree_collections")
 	m.selection = generic.Unwrap(m.view.GetSelection())
 	m.dlgEdit = newCollectionEditDialog(builder)
 
@@ -212,9 +212,9 @@ type collectionEditDialog struct {
 
 func newCollectionEditDialog(builder *gtk.Builder) *collectionEditDialog {
 	d := &collectionEditDialog{}
-	d.dialog = generic.Unwrap(builder.GetObject("dialog_new_collection")).(*gtk.Dialog)
-	d.path = generic.Unwrap(builder.GetObject("choose_new_collection_path")).(*gtk.FileChooserWidget)
-	d.name = generic.Unwrap(builder.GetObject("entry_new_collection_name")).(*gtk.Entry)
+	MustReadObject(&d.dialog, builder, "dialog_new_collection")
+	MustReadObject(&d.path, builder, "choose_new_collection_path")
+	MustReadObject(&d.name, builder, "entry_new_collection_name")
 	// If user hasn't customised the collection name, they'll see placeholder, which will follow selected directory name
 	d.path.Connect("selection-changed", func(fileChooser *gtk.FileChooserWidget) {
 		dirPath := fileChooser.GetFilename()

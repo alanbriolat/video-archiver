@@ -27,8 +27,8 @@ type downloadManager struct {
 	store         *gtk.ListStore
 	view          *gtk.TreeView
 	selection     *gtk.TreeSelection
-	paneDownloads *gtk.Widget
-	paneDetails   *gtk.Widget
+	paneDownloads *gtk.Paned
+	paneDetails   *gtk.Box
 	btnNew        *gtk.Button
 	entryNewURL   *gtk.Entry
 
@@ -42,13 +42,13 @@ func newDownloadManager(app *application, builder *gtk.Builder) *downloadManager
 	}
 
 	// Get widget references from the builder
-	m.store = generic.Unwrap(builder.GetObject("list_store_downloads")).(*gtk.ListStore)
-	m.view = generic.Unwrap(builder.GetObject("tree_downloads")).(*gtk.TreeView)
+	MustReadObject(&m.store, builder, "list_store_downloads")
+	MustReadObject(&m.view, builder, "tree_downloads")
 	m.selection = generic.Unwrap(m.view.GetSelection())
-	m.paneDownloads = generic.Unwrap(builder.GetObject("pane_downloads")).(gtk.IWidget).ToWidget()
-	m.paneDetails = generic.Unwrap(builder.GetObject("pane_download_details")).(gtk.IWidget).ToWidget()
-	m.btnNew = generic.Unwrap(builder.GetObject("btn_new_download")).(*gtk.Button)
-	m.entryNewURL = generic.Unwrap(builder.GetObject("entry_new_download_url")).(*gtk.Entry)
+	MustReadObject(&m.paneDownloads, builder, "pane_downloads")
+	MustReadObject(&m.paneDetails, builder, "pane_download_details")
+	MustReadObject(&m.btnNew, builder, "btn_new_download")
+	MustReadObject(&m.entryNewURL, builder, "entry_new_download_url")
 
 	m.selection.SetMode(gtk.SELECTION_SINGLE)
 	m.selection.Connect("changed", m.onViewSelectionChanged)

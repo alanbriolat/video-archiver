@@ -17,9 +17,6 @@ import (
 const appName = "video-archiver"
 const appId = "co.hexi.video-archiver"
 
-//go:embed main.glade
-var glade string
-
 var databasePath = flag.String("database", filepath.Join(glib.GetUserConfigDir(), appName, "database.sqlite3"), "override database path")
 
 type application struct {
@@ -77,8 +74,8 @@ func (a *application) onStartup() {
 func (a *application) onActivate() {
 	log.Println("application activate")
 
-	builder := generic.Unwrap(gtk.BuilderNewFromString(glade))
-	a.window = generic.Unwrap(builder.GetObject("window_main")).(*gtk.ApplicationWindow)
+	builder := MustNewBuilder("main.glade")
+	MustReadObject(&a.window, builder, "window_main")
 	a.window.SetApplication(a.gtkApplication)
 
 	a.downloads = newDownloadManager(a, builder)
