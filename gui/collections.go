@@ -3,6 +3,7 @@ package gui
 import (
 	"fmt"
 	"path"
+	"strings"
 
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
@@ -30,7 +31,7 @@ type collectionManager struct {
 	view      *gtk.TreeView
 	selection *gtk.TreeSelection
 
-	dlgCreate *collectionCreationDialog
+	dlgEdit *collectionEditDialog
 
 	OnCurrentChanged func(*collection)
 }
@@ -49,7 +50,7 @@ func newCollectionManager(app *application, builder *gtk.Builder) *collectionMan
 	m.store = generic.Unwrap(builder.GetObject("list_store_collections")).(*gtk.ListStore)
 	m.view = generic.Unwrap(builder.GetObject("tree_collections")).(*gtk.TreeView)
 	m.selection = generic.Unwrap(m.view.GetSelection())
-	m.dlgCreate = newCollectionCreationDialog(builder)
+	m.dlgEdit = newCollectionEditDialog(builder)
 
 	m.selection.SetMode(gtk.SELECTION_SINGLE)
 	m.selection.Connect("changed", m.onViewSelectionChanged)
@@ -79,9 +80,30 @@ func (m *collectionManager) onViewSelectionChanged(selection *gtk.TreeSelection)
 }
 
 func (m *collectionManager) onNewButtonClicked() {
-	if c := m.dlgCreate.run(); c != nil {
-		m.create(c)
+	c := database.Collection{}
+	defer m.dlgEdit.hide()
+	for {
+		if !m.dlgEdit.run(&c) {
+			break
+		}
+		v := ValidationResult{}
+		if c.Name == "" {
+			v.AddError("name", "Collection name must not be empty")
+		}
+		if generic.Unwrap(m.app.database.CollectionNameExists(c.Name)) {
+			v.AddError("name", "Collection name already in use")
+		}
+		if c.Path == "" {
+			v.AddError("path", "Collection path must be set")
+		}
+		if v.IsOk() {
+			m.create(&c)
+			break
+		} else {
+			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
+		}
 	}
+
 }
 
 func (m *collectionManager) onDeleteButtonClicked() {
@@ -182,18 +204,19 @@ func (c *collection) String() string {
 	return fmt.Sprintf("collection{ID: %v, Name:%#v, Path:%#v}", c.ID, c.Name, c.Path)
 }
 
-type collectionCreationDialog struct {
-	dialog *gtk.FileChooserDialog
+type collectionEditDialog struct {
+	dialog *gtk.Dialog
+	path   *gtk.FileChooserWidget
 	name   *gtk.Entry
-	path   *gtk.FileChooserButton
 }
 
-func newCollectionCreationDialog(builder *gtk.Builder) *collectionCreationDialog {
-	d := &collectionCreationDialog{}
-	d.dialog = generic.Unwrap(builder.GetObject("dialog_new_collection")).(*gtk.FileChooserDialog)
+func newCollectionEditDialog(builder *gtk.Builder) *collectionEditDialog {
+	d := &collectionEditDialog{}
+	d.dialog = generic.Unwrap(builder.GetObject("dialog_new_collection")).(*gtk.Dialog)
+	d.path = generic.Unwrap(builder.GetObject("choose_new_collection_path")).(*gtk.FileChooserWidget)
 	d.name = generic.Unwrap(builder.GetObject("entry_new_collection_name")).(*gtk.Entry)
 	// If user hasn't customised the collection name, they'll see placeholder, which will follow selected directory name
-	d.dialog.Connect("selection-changed", func(fileChooser *gtk.FileChooserDialog) {
+	d.path.Connect("selection-changed", func(fileChooser *gtk.FileChooserWidget) {
 		dirPath := fileChooser.GetFilename()
 		var dirName string
 		if dirPath == "" {
@@ -209,39 +232,58 @@ func newCollectionCreationDialog(builder *gtk.Builder) *collectionCreationDialog
 			d.name.SetText(generic.Unwrap(d.name.GetPlaceholderText()))
 		}
 	})
+	// Whenever either input is edited, update the "sensitive" state of the OK button
+	d.path.Connect("selection-changed", d.updateOkButton)
+	d.name.Connect("changed", d.updateOkButton)
 	return d
 }
 
-func (d *collectionCreationDialog) run() (new *database.Collection) {
-	// Clear from any previous use
-	d.dialog.UnselectAll()
+func (d *collectionEditDialog) reset() {
+	d.path.UnselectAll()
 	d.name.SetText("")
 	d.name.SetPlaceholderText("")
-	// Show it to the user
-	d.dialog.ShowAll()
-
-	// TODO: do this in a loop, with some validation
-	if response := d.dialog.Run(); response == gtk.RESPONSE_OK {
-		new = &database.Collection{
-			Name: d.getName(),
-			Path: d.getPath(),
-		}
-	} else {
-		// Doesn't set `new`, so returns nil
-	}
-
-	// All done, hide it
-	d.dialog.Hide()
-	return new
 }
 
-func (d *collectionCreationDialog) getPath() string {
-	return d.dialog.GetFilename()
+func (d *collectionEditDialog) run(c *database.Collection) bool {
+	if c.Path == "" {
+		d.path.UnselectAll()
+	} else if d.getPath() != c.Path {
+		d.path.SelectFilename(c.Path)
+	}
+	d.name.SetText(c.Name)
+	d.dialog.ShowAll()
+
+	if response := d.dialog.Run(); response == gtk.RESPONSE_OK {
+		c.Name = d.getName()
+		c.Path = d.getPath()
+		return true
+	} else {
+		return false
+	}
+}
+
+func (d *collectionEditDialog) hide() {
+	d.dialog.Hide()
+}
+
+func (d *collectionEditDialog) showError(format string, args ...interface{}) {
+	dlg := gtk.MessageDialogNew(d.dialog, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, format, args...)
+	defer dlg.Destroy()
+	dlg.Run()
+}
+
+func (d *collectionEditDialog) updateOkButton() {
+	enabled := d.getName() != "" && d.getPath() != ""
+	generic.Unwrap(d.dialog.GetWidgetForResponse(gtk.RESPONSE_OK)).ToWidget().SetSensitive(enabled)
+}
+
+func (d *collectionEditDialog) getPath() string {
+	return d.path.GetFilename()
 }
 
 // getName gets the intended collection name, which is either a value entered by the user or the placeholder populated
 // from the selected directory name.
-func (d *collectionCreationDialog) getName() string {
+func (d *collectionEditDialog) getName() string {
 	if name := generic.Unwrap(d.name.GetText()); name != "" {
 		return name
 	} else {

@@ -107,6 +107,15 @@ func (d *Database) DeleteCollection(id RowID) error {
 	return nil
 }
 
+func (d *Database) CollectionNameExists(name string) (bool, error) {
+	var count int
+	if err := d.db.Get(&count, `SELECT count(*) FROM collection WHERE name = ?`, name); err != nil {
+		return false, err
+	} else {
+		return count > 0, nil
+	}
+}
+
 // InsertDownload will add a new download to the database, overwriting any auto-generated attributes with those from the database.
 func (d *Database) InsertDownload(download *Download) error {
 	if res, err := d.db.NamedExec(`INSERT INTO download (collection_id, url) VALUES (:collection_id, :url)`, download); err != nil {
