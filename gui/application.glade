@@ -61,6 +61,21 @@
               <object class="GtkToolButton">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
+                <property name="tooltip_text" translatable="yes">Edit selected collection</property>
+                <property name="action_name">win.edit_collection</property>
+                <property name="label" translatable="yes">Edit collection</property>
+                <property name="use_underline">True</property>
+                <property name="stock_id">gtk-edit</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="homogeneous">True</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkToolButton">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
                 <property name="tooltip_text" translatable="yes">Delete selected collection</property>
                 <property name="action_name">win.delete_collection</property>
                 <property name="label" translatable="yes">Delete collection</property>

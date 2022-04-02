@@ -53,7 +53,7 @@ func (d *collectionEditDialog) reset() {
 func (d *collectionEditDialog) run(c *database.Collection) bool {
 	if c.Path == "" {
 		d.path.UnselectAll()
-	} else if d.getPath() != c.Path {
+	} else {
 		d.path.SelectFilename(c.Path)
 	}
 	d.name.SetText(c.Name)

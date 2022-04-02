@@ -66,7 +66,7 @@ func (m *downloadManager) mustRefresh() {
 	if m.collection == nil {
 		return
 	}
-	for _, dbDownload := range generic.Unwrap(m.app.database.GetCollectionDownloads(m.collection.ID)) {
+	for _, dbDownload := range generic.Unwrap(m.app.database.GetDownloadsByCollectionID(m.collection.ID)) {
 		d := &download{Download: dbDownload}
 		m.downloads[d.ID] = d
 		generic.Unwrap_(d.addToStore(m.store))

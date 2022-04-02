@@ -24,6 +24,7 @@ type collectionManager struct {
 	current     *collection
 
 	actionNew    *glib.SimpleAction
+	actionEdit   *glib.SimpleAction
 	actionDelete *glib.SimpleAction
 
 	store     *gtk.ListStore
@@ -42,6 +43,8 @@ func newCollectionManager(app *application, builder *gtk.Builder) *collectionMan
 	}
 
 	m.actionNew = m.app.registerSimpleWindowAction("new_collection", nil, m.onNewButtonClicked)
+	m.actionEdit = m.app.registerSimpleWindowAction("edit_collection", nil, m.onEditButtonClicked)
+	m.actionEdit.SetEnabled(false)
 	m.actionDelete = m.app.registerSimpleWindowAction("delete_collection", nil, m.onDeleteButtonClicked)
 	m.actionDelete.SetEnabled(false)
 
@@ -89,8 +92,8 @@ func (m *collectionManager) onNewButtonClicked() {
 		if c.Name == "" {
 			v.AddError("name", "Collection name must not be empty")
 		}
-		if generic.Unwrap(m.app.database.CollectionNameExists(c.Name)) {
-			v.AddError("name", "Collection name already in use")
+		if generic.Unwrap(m.app.database.GetCollectionByName(c.Name)) != nil {
+			v.AddError("name", "Collection name in use by another collection")
 		}
 		if c.Path == "" {
 			v.AddError("path", "Collection path must be set")
@@ -102,7 +105,33 @@ func (m *collectionManager) onNewButtonClicked() {
 			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
 		}
 	}
+}
 
+func (m *collectionManager) onEditButtonClicked() {
+	c := m.current.Collection
+	defer m.dlgEdit.hide()
+	for {
+		if !m.dlgEdit.run(&c) {
+			break
+		}
+		v := ValidationResult{}
+		if c.Name == "" {
+			v.AddError("name", "Collection name must not be empty")
+		}
+		if other := generic.Unwrap(m.app.database.GetCollectionByName(c.Name)); other != nil && other.ID != c.ID {
+			v.AddError("name", "Collection name in use by another collection")
+		}
+		if c.Path == "" {
+			v.AddError("path", "Collection path must be set")
+		}
+		if v.IsOk() {
+			m.current.Collection = c
+			m.update(m.current)
+			break
+		} else {
+			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
+		}
+	}
 }
 
 func (m *collectionManager) onDeleteButtonClicked() {
@@ -125,11 +154,17 @@ func (m *collectionManager) create(dbCollection *database.Collection) {
 	}
 }
 
+func (m *collectionManager) update(c *collection) {
+	generic.Unwrap_(m.app.database.UpdateCollection(&c.Collection))
+	generic.Unwrap_(c.updateView())
+}
+
 func (m *collectionManager) setCurrent(id database.RowID) {
 	if m.current != nil && m.current.ID == id {
 		return
 	}
 	m.current = m.collections[id]
+	m.actionEdit.SetEnabled(true)
 	m.actionDelete.SetEnabled(true)
 	if m.OnCurrentChanged != nil {
 		m.OnCurrentChanged(m.current)
@@ -141,6 +176,7 @@ func (m *collectionManager) unsetCurrent() {
 		return
 	}
 	m.current = nil
+	m.actionEdit.SetEnabled(false)
 	m.actionDelete.SetEnabled(false)
 	if m.OnCurrentChanged != nil {
 		m.OnCurrentChanged(m.current)

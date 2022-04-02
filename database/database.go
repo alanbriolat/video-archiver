@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"embed"
 	"fmt"
 	"log"
@@ -68,12 +69,32 @@ func (d *Database) GetAllCollections() ([]Collection, error) {
 	return collections, nil
 }
 
-func (d *Database) GetCollectionDownloads(id RowID) ([]Download, error) {
-	var downloads []Download
-	if err := d.db.Select(&downloads, `SELECT rowid, * FROM download WHERE collection_id = ? ORDER BY added DESC`, id); err != nil {
-		return nil, err
+// GetCollectionByID returns (nil, nil) if the error is only that no such row exists.
+func (d *Database) GetCollectionByID(id RowID) (*Collection, error) {
+	c := Collection{}
+	if err := d.db.Get(&c, `SELECT rowid, * FROM collection WHERE rowid = ? LIMIT 1`, id); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		} else {
+			return nil, err
+		}
+	} else {
+		return &c, nil
 	}
-	return downloads, nil
+}
+
+// GetCollectionByName returns (nil, nil) if the error is only that no such row exists.
+func (d *Database) GetCollectionByName(name string) (*Collection, error) {
+	c := Collection{}
+	if err := d.db.Get(&c, `SELECT rowid, * FROM collection WHERE name = ? LIMIT 1`, name); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		} else {
+			return nil, err
+		}
+	} else {
+		return &c, nil
+	}
 }
 
 // InsertCollection will add a new collection to the database, overwriting Collection.ID with the new row ID.
@@ -84,6 +105,19 @@ func (d *Database) InsertCollection(c *Collection) error {
 		return err
 	}
 	return nil
+}
+
+// UpdateCollection will set all non-ID values in the database row identified by Collection.ID.
+func (d *Database) UpdateCollection(c *Collection) error {
+	if res, err := d.db.NamedExec(`UPDATE collection SET name = :name, path = :path WHERE rowid = :rowid`, c); err != nil {
+		return err
+	} else if count, err := res.RowsAffected(); err != nil {
+		return err
+	} else if count == 0 {
+		return sql.ErrNoRows
+	} else {
+		return nil
+	}
 }
 
 // RefreshCollection will reload the collection information from the database.
@@ -107,13 +141,12 @@ func (d *Database) DeleteCollection(id RowID) error {
 	return nil
 }
 
-func (d *Database) CollectionNameExists(name string) (bool, error) {
-	var count int
-	if err := d.db.Get(&count, `SELECT count(*) FROM collection WHERE name = ?`, name); err != nil {
-		return false, err
-	} else {
-		return count > 0, nil
+func (d *Database) GetDownloadsByCollectionID(id RowID) ([]Download, error) {
+	var downloads []Download
+	if err := d.db.Select(&downloads, `SELECT rowid, * FROM download WHERE collection_id = ? ORDER BY added DESC`, id); err != nil {
+		return nil, err
 	}
+	return downloads, nil
 }
 
 // InsertDownload will add a new download to the database, overwriting any auto-generated attributes with those from the database.
