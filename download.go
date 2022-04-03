@@ -122,8 +122,8 @@ func (d *download) SaveStream(filename string, stream io.Reader) error {
 	}
 	defer f.Close()
 
-	// TODO: how to cancel io.Copy? relies on the stream having a context?
-	_, err = io.Copy(io.MultiWriter(f, d), stream)
+	r := &readerContext{ctx: d.ctx, r: stream}
+	_, err = io.Copy(io.MultiWriter(f, d), r)
 	if err != nil {
 		return fmt.Errorf("failed to save stream: %w", err)
 	}
