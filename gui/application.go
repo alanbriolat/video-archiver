@@ -1,8 +1,9 @@
 package gui
 
 import (
+	"context"
 	_ "embed"
-	"flag"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -10,16 +11,85 @@ import (
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 
+	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/database"
-	"github.com/alanbriolat/video-archiver/generic"
 )
 
-const appName = "video-archiver"
-const appId = "co.hexi.video-archiver"
+const DefaultAppName = "video-archiver"
+const DefaultAppID = "co.hexi.video-archiver"
 
-var databasePath = flag.String("database", filepath.Join(glib.GetUserConfigDir(), appName, "database.sqlite3"), "override database path")
+type ApplicationBuilder interface {
+	Build() (Application, error)
+	WithContext(ctx context.Context) ApplicationBuilder
+	WithDatabasePath(path string) ApplicationBuilder
+	WithProviderRegistry(*video_archiver.ProviderRegistry) ApplicationBuilder
+}
+
+type applicationBuilder struct {
+	appName          string
+	appID            string
+	ctx              context.Context
+	configPath       string
+	dbPath           string
+	providerRegistry *video_archiver.ProviderRegistry
+}
+
+func NewApplicationBuilder(name, id string) ApplicationBuilder {
+	return &applicationBuilder{
+		appName: name,
+		appID:   id,
+	}
+}
+
+func (b *applicationBuilder) Build() (Application, error) {
+	if b.appName == "" {
+		return nil, fmt.Errorf("application name must be a non-empty string")
+	}
+	if b.appID == "" {
+		return nil, fmt.Errorf("application ID must be a non-empty string")
+	}
+	app := &application{applicationBuilder: *b}
+	if app.ctx == nil {
+		app.ctx = context.Background()
+	}
+	if app.configPath == "" {
+		app.configPath = filepath.Join(glib.GetUserConfigDir(), app.appName)
+	}
+	if app.dbPath == "" {
+		app.dbPath = filepath.Join(app.configPath, "database.sqlite3")
+	}
+	if app.providerRegistry == nil {
+		app.providerRegistry = &video_archiver.DefaultProviderRegistry
+	}
+	return app, nil
+}
+
+func (b *applicationBuilder) WithContext(ctx context.Context) ApplicationBuilder {
+	b.ctx = ctx
+	return b
+}
+
+func (b *applicationBuilder) WithDatabasePath(path string) ApplicationBuilder {
+	b.dbPath = path
+	return b
+}
+
+func (b *applicationBuilder) WithProviderRegistry(r *video_archiver.ProviderRegistry) ApplicationBuilder {
+	b.providerRegistry = r
+	return b
+}
+
+type Application interface {
+	Init() error
+	Run() int
+	RunWithArgs([]string) int
+	Quit()
+	Close() error
+}
 
 type application struct {
+	applicationBuilder
+	cancel         context.CancelFunc
 	database       *database.Database
 	collections    *collectionManager
 	downloads      *downloadManager
@@ -27,44 +97,64 @@ type application struct {
 	window         *gtk.ApplicationWindow
 }
 
-func newApplication() (*application, error) {
+func (a *application) Init() error {
 	var err error
-	a := &application{}
+	if a.cancel != nil {
+		return fmt.Errorf("init already run")
+	}
 
-	configPath := filepath.Join(glib.GetUserConfigDir(), appName)
-	generic.Unwrap_(os.MkdirAll(configPath, 0750))
-	if a.database, err = database.NewDatabase(*databasePath); err != nil {
-		return nil, err
+	a.ctx, a.cancel = context.WithCancel(a.ctx)
+
+	if err = os.MkdirAll(a.configPath, 0750); err != nil {
+		return fmt.Errorf("failed to create config path %v: %w", a.configPath, err)
+	}
+	if err = os.MkdirAll(filepath.Dir(a.dbPath), 0750); err != nil {
+		return fmt.Errorf("failed to create database %v: %w", a.dbPath, err)
+	}
+	if a.database, err = database.NewDatabase(a.dbPath); err != nil {
+		return fmt.Errorf("failed to create database %v: %w", a.dbPath, err)
 	}
 	if err = a.database.Migrate(); err != nil {
-		return nil, err
+		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
-	if a.gtkApplication, err = gtk.ApplicationNew(appId, glib.APPLICATION_FLAGS_NONE); err != nil {
-		return nil, err
+	if a.gtkApplication, err = gtk.ApplicationNew(a.appID, glib.APPLICATION_FLAGS_NONE); err != nil {
+		return fmt.Errorf("failed to create GTK application: %w", err)
 	}
-
 	a.gtkApplication.Connect("startup", a.onStartup)
 	a.gtkApplication.Connect("activate", a.onActivate)
 	a.gtkApplication.Connect("shutdown", a.onShutdown)
 
-	return a, nil
+	return nil
 }
 
-func (a *application) run() int {
-	return a.runWithArgs(os.Args)
+func (a *application) Run() int {
+	return a.RunWithArgs([]string{})
 }
 
-func (a *application) runWithArgs(args []string) int {
+func (a *application) RunWithArgs(args []string) int {
+	// Ensure the GTK application quits if the context is cancelled
+	go func() {
+		<-a.ctx.Done()
+		glib.IdleAddPriority(glib.PRIORITY_HIGH, func() { a.gtkApplication.Quit() })
+	}()
 	return a.gtkApplication.Run(args)
 }
 
-func (a *application) runAndExit() {
-	a.runWithArgsAndExit(os.Args)
+func (a *application) Quit() {
+	a.cancel()
 }
 
-func (a *application) runWithArgsAndExit(args []string) {
-	os.Exit(a.runWithArgs(args))
+func (a *application) Close() error {
+	if a.cancel != nil {
+		a.cancel()
+		a.cancel = nil
+	}
+	if a.database != nil {
+		a.database.Close()
+		a.database = nil
+	}
+	return nil
 }
 
 func (a *application) onStartup() {
@@ -94,7 +184,8 @@ func (a *application) onActivate() {
 
 func (a *application) onShutdown() {
 	log.Println("application shutdown")
-	a.database.Close()
+	// Ensure context is cancelled no matter how the application shutdown was triggered
+	a.cancel()
 }
 
 func (a *application) registerSimpleWindowAction(name string, parameterType *glib.VariantType, f func()) *glib.SimpleAction {
@@ -110,10 +201,4 @@ func (a *application) runWarningDialog(format string, args ...interface{}) bool 
 	defer dlg.Destroy()
 	response := dlg.Run()
 	return response == gtk.RESPONSE_OK
-}
-
-func Main() {
-	flag.Parse()
-	a := generic.Unwrap(newApplication())
-	a.runWithArgsAndExit([]string{})
 }
