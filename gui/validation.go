@@ -1,5 +1,12 @@
 package gui
 
+import (
+	"fmt"
+	"net/url"
+
+	"github.com/alanbriolat/video-archiver/generic"
+)
+
 type ValidationResult struct {
 	errors map[string][]string
 }
@@ -32,4 +39,18 @@ func (r *ValidationResult) GetAllErrors() []string {
 		errors = append(errors, e...)
 	}
 	return errors
+}
+
+var validURLSchemes = generic.NewSet("http", "https")
+
+func validateURL(s string) error {
+	if parsed, err := url.Parse(s); err != nil {
+		return err
+	} else if !validURLSchemes.Contains(parsed.Scheme) {
+		return fmt.Errorf("unrecognized scheme: %v", parsed.Scheme)
+	} else if parsed.Hostname() == "" {
+		return fmt.Errorf("missing host")
+	} else {
+		return nil
+	}
 }

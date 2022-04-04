@@ -202,3 +202,10 @@ func (a *application) runWarningDialog(format string, args ...interface{}) bool 
 	response := dlg.Run()
 	return response == gtk.RESPONSE_OK
 }
+
+// runErrorDialog will show a modal error dialog with an "OK" button.
+func (a *application) runErrorDialog(format string, args ...interface{}) {
+	dlg := gtk.MessageDialogNew(a.window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, format, args...)
+	defer dlg.Destroy()
+	_ = dlg.Run()
+}

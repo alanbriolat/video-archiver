@@ -2,7 +2,10 @@ package gui
 
 import (
 	"fmt"
+	"log"
 
+	"github.com/gotk3/gotk3/gdk"
+	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 
 	"github.com/alanbriolat/video-archiver/database"
@@ -24,6 +27,8 @@ type downloadManager struct {
 	downloads  map[database.RowID]*download
 	current    *download
 
+	actionPaste *glib.SimpleAction
+
 	store         *gtk.ListStore
 	view          *gtk.TreeView
 	selection     *gtk.TreeSelection
@@ -40,6 +45,10 @@ func newDownloadManager(app *application, builder *gtk.Builder) *downloadManager
 		app:       app,
 		downloads: make(map[database.RowID]*download),
 	}
+
+	m.actionPaste = m.app.registerSimpleWindowAction("paste_download", nil, m.onPasteButtonClicked)
+	m.app.gtkApplication.SetAccelsForAction("win.paste_download", []string{"<Primary>V"})
+	m.actionPaste.SetEnabled(false)
 
 	// Get widget references from the builder
 	MustReadObject(&m.store, builder, "list_store_downloads")
@@ -84,10 +93,39 @@ func (m *downloadManager) onViewSelectionChanged(selection *gtk.TreeSelection) {
 }
 
 func (m *downloadManager) onNewButtonClicked() {
-	url := generic.Unwrap(m.entryNewURL.GetText())
-	d := &database.Download{CollectionID: m.collection.ID, URL: url}
-	m.create(d)
-	m.entryNewURL.SetText("")
+	text := generic.Unwrap(m.entryNewURL.GetText())
+	err := m.addDownloadURL(text)
+	if err != nil {
+		m.app.runErrorDialog("Could not add download: %v", err)
+	} else {
+		m.entryNewURL.SetText("")
+	}
+}
+
+func (m *downloadManager) onPasteButtonClicked() {
+	log.Println("onPasteButtonClicked")
+	// Get the clipboard text
+	clipboard := generic.Unwrap(gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD))
+	text := generic.Unwrap(clipboard.WaitForText())
+	// Attempt to add the URL as a download
+	err := m.addDownloadURL(text)
+	if err != nil {
+		m.app.runErrorDialog("Could not add download: %v", err)
+	}
+}
+
+func (m *downloadManager) addDownloadURL(text string) error {
+	if text == "" {
+		return fmt.Errorf("no URL provided")
+	} else if m.collection == nil {
+		return fmt.Errorf("no collection selected")
+	} else if err := validateURL(text); err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	} else {
+		d := &database.Download{CollectionID: m.collection.ID, URL: text}
+		m.create(d)
+		return nil
+	}
 }
 
 func (m *downloadManager) create(dbDownload *database.Download) {
@@ -102,7 +140,9 @@ func (m *downloadManager) setCollection(c *collection) {
 		return
 	}
 	m.collection = c
-	m.paneDownloads.SetVisible(m.collection != nil)
+	enabled := m.collection != nil
+	m.paneDownloads.SetVisible(enabled)
+	m.actionPaste.SetEnabled(enabled)
 	m.mustRefresh()
 }
 
