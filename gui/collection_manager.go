@@ -27,8 +27,8 @@ type collectionManager struct {
 	actionEdit   *glib.SimpleAction
 	actionDelete *glib.SimpleAction
 
-	store     *gtk.ListStore
-	view      *gtk.TreeView
+	Store     *gtk.ListStore `glade:"list_store_collections"`
+	View      *gtk.TreeView  `glade:"tree_collections"`
 	selection *gtk.TreeSelection
 
 	dlgEdit *collectionEditDialog
@@ -49,9 +49,8 @@ func newCollectionManager(app *application, builder *gtk.Builder) *collectionMan
 	m.actionDelete.SetEnabled(false)
 
 	// Get widget references from the builder
-	MustReadObject(&m.store, builder, "list_store_collections")
-	MustReadObject(&m.view, builder, "tree_collections")
-	m.selection = generic.Unwrap(m.view.GetSelection())
+	MustBuild(m, builder)
+	m.selection = generic.Unwrap(m.View.GetSelection())
 	m.dlgEdit = newCollectionEditDialog()
 
 	m.selection.SetMode(gtk.SELECTION_SINGLE)
@@ -63,11 +62,11 @@ func newCollectionManager(app *application, builder *gtk.Builder) *collectionMan
 func (m *collectionManager) mustRefresh() {
 	m.collections = make(map[database.RowID]*collection)
 	m.unsetCurrent()
-	m.store.Clear()
+	m.Store.Clear()
 	for _, dbCollection := range generic.Unwrap(m.app.database.GetAllCollections()) {
 		c := &collection{Collection: dbCollection}
 		m.collections[c.ID] = c
-		generic.Unwrap_(c.addToStore(m.store))
+		generic.Unwrap_(c.addToStore(m.Store))
 	}
 }
 
@@ -147,7 +146,7 @@ func (m *collectionManager) create(dbCollection *database.Collection) {
 	generic.Unwrap_(m.app.database.InsertCollection(dbCollection))
 	c := &collection{Collection: *dbCollection}
 	m.collections[c.ID] = c
-	generic.Unwrap_(c.addToStore(m.store))
+	generic.Unwrap_(c.addToStore(m.Store))
 	// TODO: just always select the new row instead?
 	if len(m.collections) == 1 {
 		m.selection.SelectPath(generic.Unwrap(gtk.TreePathNewFirst()))

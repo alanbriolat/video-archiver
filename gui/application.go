@@ -87,6 +87,7 @@ type Application interface {
 	Close() error
 }
 
+// TODO: recursive glade field handling for collectionManager and downloadManager
 type application struct {
 	applicationBuilder
 	cancel         context.CancelFunc
@@ -94,7 +95,7 @@ type application struct {
 	collections    *collectionManager
 	downloads      *downloadManager
 	gtkApplication *gtk.Application
-	window         *gtk.ApplicationWindow
+	Window         *gtk.ApplicationWindow `glade:"window_main"`
 }
 
 func (a *application) Init() error {
@@ -164,9 +165,9 @@ func (a *application) onStartup() {
 func (a *application) onActivate() {
 	log.Println("application activate")
 
-	builder := MustNewBuilder("application.glade")
-	MustReadObject(&a.window, builder, "window_main")
-	a.window.SetApplication(a.gtkApplication)
+	builder := MustNewBuilderFromEmbed("application.glade")
+	MustBuild(a, builder)
+	a.Window.SetApplication(a.gtkApplication)
 
 	a.downloads = newDownloadManager(a, builder)
 	a.downloads.OnCurrentChanged = func(d *download) {
@@ -178,7 +179,7 @@ func (a *application) onActivate() {
 		a.downloads.setCollection(c)
 	}
 
-	a.window.Show()
+	a.Window.Show()
 	a.collections.mustRefresh()
 }
 
@@ -191,13 +192,13 @@ func (a *application) onShutdown() {
 func (a *application) registerSimpleWindowAction(name string, parameterType *glib.VariantType, f func()) *glib.SimpleAction {
 	action := glib.SimpleActionNew(name, parameterType)
 	action.Connect("activate", f)
-	a.window.AddAction(action)
+	a.Window.AddAction(action)
 	return action
 }
 
 // runWarningDialog will show a modal warning dialog with "OK" and "Cancel" buttons, returning true if "OK" was clicked.
 func (a *application) runWarningDialog(format string, args ...interface{}) bool {
-	dlg := gtk.MessageDialogNew(a.window, gtk.DIALOG_MODAL, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK_CANCEL, format, args...)
+	dlg := gtk.MessageDialogNew(a.Window, gtk.DIALOG_MODAL, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK_CANCEL, format, args...)
 	defer dlg.Destroy()
 	response := dlg.Run()
 	return response == gtk.RESPONSE_OK
@@ -205,7 +206,7 @@ func (a *application) runWarningDialog(format string, args ...interface{}) bool 
 
 // runErrorDialog will show a modal error dialog with an "OK" button.
 func (a *application) runErrorDialog(format string, args ...interface{}) {
-	dlg := gtk.MessageDialogNew(a.window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, format, args...)
+	dlg := gtk.MessageDialogNew(a.Window, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, format, args...)
 	defer dlg.Destroy()
 	_ = dlg.Run()
 }

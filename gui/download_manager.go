@@ -29,13 +29,13 @@ type downloadManager struct {
 
 	actionPaste *glib.SimpleAction
 
-	store         *gtk.ListStore
-	view          *gtk.TreeView
+	Store         *gtk.ListStore `glade:"list_store_downloads"`
+	View          *gtk.TreeView  `glade:"tree_downloads"`
 	selection     *gtk.TreeSelection
-	paneDownloads *gtk.Paned
-	paneDetails   *gtk.Box
-	btnNew        *gtk.Button
-	entryNewURL   *gtk.Entry
+	PaneDownloads *gtk.Paned  `glade:"pane_downloads"`
+	PaneDetails   *gtk.Box    `glade:"pane_download_details"`
+	BtnNew        *gtk.Button `glade:"btn_new_download"`
+	EntryNewURL   *gtk.Entry  `glade:"entry_new_download_url"`
 
 	OnCurrentChanged func(*download)
 }
@@ -51,19 +51,14 @@ func newDownloadManager(app *application, builder *gtk.Builder) *downloadManager
 	m.actionPaste.SetEnabled(false)
 
 	// Get widget references from the builder
-	MustReadObject(&m.store, builder, "list_store_downloads")
-	MustReadObject(&m.view, builder, "tree_downloads")
-	m.selection = generic.Unwrap(m.view.GetSelection())
-	MustReadObject(&m.paneDownloads, builder, "pane_downloads")
-	MustReadObject(&m.paneDetails, builder, "pane_download_details")
-	MustReadObject(&m.btnNew, builder, "btn_new_download")
-	MustReadObject(&m.entryNewURL, builder, "entry_new_download_url")
+	MustBuild(m, builder)
+	m.selection = generic.Unwrap(m.View.GetSelection())
 
 	m.selection.SetMode(gtk.SELECTION_SINGLE)
 	m.selection.Connect("changed", m.onViewSelectionChanged)
-	m.paneDownloads.SetVisible(false)
-	m.paneDetails.SetVisible(false)
-	m.btnNew.Connect("clicked", m.onNewButtonClicked)
+	m.PaneDownloads.SetVisible(false)
+	m.PaneDetails.SetVisible(false)
+	m.BtnNew.Connect("clicked", m.onNewButtonClicked)
 
 	return m
 }
@@ -71,14 +66,14 @@ func newDownloadManager(app *application, builder *gtk.Builder) *downloadManager
 func (m *downloadManager) mustRefresh() {
 	m.downloads = make(map[database.RowID]*download)
 	m.unsetCurrent()
-	m.store.Clear()
+	m.Store.Clear()
 	if m.collection == nil {
 		return
 	}
 	for _, dbDownload := range generic.Unwrap(m.app.database.GetDownloadsByCollectionID(m.collection.ID)) {
 		d := &download{Download: dbDownload}
 		m.downloads[d.ID] = d
-		generic.Unwrap_(d.addToStore(m.store))
+		generic.Unwrap_(d.addToStore(m.Store))
 	}
 }
 
@@ -93,12 +88,12 @@ func (m *downloadManager) onViewSelectionChanged(selection *gtk.TreeSelection) {
 }
 
 func (m *downloadManager) onNewButtonClicked() {
-	text := generic.Unwrap(m.entryNewURL.GetText())
+	text := generic.Unwrap(m.EntryNewURL.GetText())
 	err := m.addDownloadURL(text)
 	if err != nil {
 		m.app.runErrorDialog("Could not add download: %v", err)
 	} else {
-		m.entryNewURL.SetText("")
+		m.EntryNewURL.SetText("")
 	}
 }
 
@@ -132,7 +127,7 @@ func (m *downloadManager) create(dbDownload *database.Download) {
 	generic.Unwrap_(m.app.database.InsertDownload(dbDownload))
 	d := &download{Download: *dbDownload}
 	m.downloads[d.ID] = d
-	generic.Unwrap_(d.addToStore(m.store))
+	generic.Unwrap_(d.addToStore(m.Store))
 }
 
 func (m *downloadManager) setCollection(c *collection) {
@@ -141,7 +136,7 @@ func (m *downloadManager) setCollection(c *collection) {
 	}
 	m.collection = c
 	enabled := m.collection != nil
-	m.paneDownloads.SetVisible(enabled)
+	m.PaneDownloads.SetVisible(enabled)
 	m.actionPaste.SetEnabled(enabled)
 	m.mustRefresh()
 }
