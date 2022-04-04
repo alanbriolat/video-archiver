@@ -11,11 +11,13 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.12
 	github.com/schollz/progressbar/v3 v3.8.6
 	github.com/stretchr/testify v1.7.1
+	github.com/urfave/cli/v2 v2.4.0
 	go.uber.org/zap v1.21.0
 )
 
 require (
 	github.com/bitly/go-simplejson v0.5.0 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.4.1-0.20201116162257-a2a8dda75c91 // indirect
 	github.com/dop251/goja v0.0.0-20211211112501-fb27c91c26ed // indirect
@@ -25,6 +27,7 @@ require (
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd // indirect

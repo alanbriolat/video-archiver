@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/schollz/progressbar/v3"
+	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 
 	"github.com/alanbriolat/video-archiver"
@@ -29,15 +29,29 @@ func main() {
 	defer stop()
 	ctx = video_archiver.WithLogger(ctx, logger)
 
-	source := flag.String("source", "", "URL to the video page")
-	target := flag.String("target", "", "Path to save the video at (must be a directory)")
-	flag.Parse()
-
-	if len(*source) == 0 || len(*target) == 0 {
-		logger.Fatal("usage: download-video --source https://site.com/videos/id --target /path/to/downloads/")
+	app := &cli.App{
+		Name:  "download-video",
+		Usage: "download a single video",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "target",
+				Value: ".",
+				Usage: "save downloaded video to `DIR`",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			target := c.String("target")
+			for _, source := range c.Args().Slice() {
+				if err := download(ctx, source, target); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		HideHelpCommand: true,
 	}
 
-	result := async.Run(func() error { return download(ctx, *source, *target) })
+	result := async.Run(func() error { return app.Run(os.Args) })
 
 	select {
 	case err = <-result:
