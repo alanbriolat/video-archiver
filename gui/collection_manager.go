@@ -9,6 +9,7 @@ import (
 
 	"github.com/alanbriolat/video-archiver/database"
 	"github.com/alanbriolat/video-archiver/generic"
+	"github.com/alanbriolat/video-archiver/glade"
 )
 
 const (
@@ -36,7 +37,7 @@ type collectionManager struct {
 	OnCurrentChanged func(*collection)
 }
 
-func newCollectionManager(app *application, builder *gtk.Builder) *collectionManager {
+func newCollectionManager(app *application, builder glade.Builder) *collectionManager {
 	m := &collectionManager{
 		app:         app,
 		collections: make(map[database.RowID]*collection),
@@ -49,7 +50,7 @@ func newCollectionManager(app *application, builder *gtk.Builder) *collectionMan
 	m.actionDelete.SetEnabled(false)
 
 	// Get widget references from the builder
-	MustBuild(m, builder)
+	builder.MustBuild(m)
 	m.selection = generic.Unwrap(m.View.GetSelection())
 	m.dlgEdit = newCollectionEditDialog()
 

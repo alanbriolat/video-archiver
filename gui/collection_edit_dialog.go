@@ -17,7 +17,7 @@ type collectionEditDialog struct {
 
 func newCollectionEditDialog() *collectionEditDialog {
 	d := &collectionEditDialog{}
-	MustBuildFromEmbed(d, "collection_edit_dialog.glade")
+	GladeRepository.MustBuild(d, "collection_edit_dialog.glade")
 	// If user hasn't customised the collection name, they'll see placeholder, which will follow selected directory name
 	d.Path.Connect("selection-changed", func(fileChooser *gtk.FileChooserWidget) {
 		dirPath := fileChooser.GetFilename()

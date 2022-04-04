@@ -13,6 +13,7 @@ import (
 
 	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/database"
+	"github.com/alanbriolat/video-archiver/generic"
 )
 
 const DefaultAppName = "video-archiver"
@@ -165,8 +166,8 @@ func (a *application) onStartup() {
 func (a *application) onActivate() {
 	log.Println("application activate")
 
-	builder := MustNewBuilderFromEmbed("application.glade")
-	MustBuild(a, builder)
+	builder := generic.Unwrap(GladeRepository.GetBuilder("application.glade"))
+	builder.MustBuild(a)
 	a.Window.SetApplication(a.gtkApplication)
 
 	a.downloads = newDownloadManager(a, builder)

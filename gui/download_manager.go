@@ -10,6 +10,7 @@ import (
 
 	"github.com/alanbriolat/video-archiver/database"
 	"github.com/alanbriolat/video-archiver/generic"
+	"github.com/alanbriolat/video-archiver/glade"
 )
 
 const (
@@ -40,7 +41,7 @@ type downloadManager struct {
 	OnCurrentChanged func(*download)
 }
 
-func newDownloadManager(app *application, builder *gtk.Builder) *downloadManager {
+func newDownloadManager(app *application, builder glade.Builder) *downloadManager {
 	m := &downloadManager{
 		app:       app,
 		downloads: make(map[database.RowID]*download),
@@ -51,7 +52,7 @@ func newDownloadManager(app *application, builder *gtk.Builder) *downloadManager
 	m.actionPaste.SetEnabled(false)
 
 	// Get widget references from the builder
-	MustBuild(m, builder)
+	builder.MustBuild(m)
 	m.selection = generic.Unwrap(m.View.GetSelection())
 
 	m.selection.SetMode(gtk.SELECTION_SINGLE)
