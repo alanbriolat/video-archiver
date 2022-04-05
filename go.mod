@@ -6,13 +6,14 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.15.1
 	github.com/gotk3/gotk3 v0.6.1
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/jmoiron/sqlx v1.3.4
 	github.com/kkdai/youtube/v2 v2.7.10
-	github.com/mattn/go-sqlite3 v1.14.12
 	github.com/schollz/progressbar/v3 v3.8.6
 	github.com/stretchr/testify v1.7.1
 	github.com/urfave/cli/v2 v2.4.0
 	go.uber.org/zap v1.21.0
+	gorm.io/driver/sqlite v1.3.1
+	gorm.io/gorm v1.23.4
+	moul.io/zapgorm2 v1.1.3
 )
 
 require (
@@ -23,7 +24,10 @@ require (
 	github.com/dop251/goja v0.0.0-20211211112501-fb27c91c26ed // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/mattn/go-runewidth v0.0.13 // indirect
+	github.com/mattn/go-sqlite3 v1.14.12 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect

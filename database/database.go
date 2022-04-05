@@ -1,18 +1,19 @@
 package database
 
 import (
-	"database/sql"
 	"embed"
 	"fmt"
 	"time"
 
 	"go.uber.org/zap"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
+	"moul.io/zapgorm2"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 //go:embed migrations/*.sql
@@ -23,12 +24,19 @@ type RowID = int64
 const NullRowID RowID = 0
 
 type Database struct {
-	db  *sqlx.DB
+	db  *gorm.DB
 	log *zap.Logger
 }
 
 func NewDatabase(path string, l *zap.Logger) (*Database, error) {
-	db, err := sqlx.Connect("sqlite3", path)
+	gormLog := zapgorm2.New(l)
+	config := &gorm.Config{
+		Logger: gormLog,
+		NamingStrategy: schema.NamingStrategy{
+			SingularTable: true,
+		},
+	}
+	db, err := gorm.Open(sqlite.Open(path), config)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +49,11 @@ func (d *Database) Migrate() error {
 	if err != nil {
 		return err
 	}
-	driver, err := sqlite3.WithInstance(d.db.DB, &sqlite3.Config{})
+	db, err := d.db.DB()
+	if err != nil {
+		return err
+	}
+	driver, err := sqlite3.WithInstance(db, &sqlite3.Config{})
 	if err != nil {
 		return err
 	}
@@ -62,22 +74,22 @@ func (d *Database) Migrate() error {
 }
 
 func (d *Database) Close() {
-	_ = d.db.Close()
 }
 
 func (d *Database) GetAllCollections() ([]Collection, error) {
 	var collections []Collection
-	if err := d.db.Select(&collections, `SELECT rowid, * FROM collection ORDER BY name`); err != nil {
+	if err := d.db.Find(&collections).Error; err != nil {
 		return nil, err
+	} else {
+		return collections, nil
 	}
-	return collections, nil
 }
 
 // GetCollectionByID returns (nil, nil) if the error is only that no such row exists.
 func (d *Database) GetCollectionByID(id RowID) (*Collection, error) {
 	c := Collection{}
-	if err := d.db.Get(&c, `SELECT rowid, * FROM collection WHERE rowid = ? LIMIT 1`, id); err != nil {
-		if err == sql.ErrNoRows {
+	if err := d.db.Take(&c, "rowid = ?", id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
 			return nil, nil
 		} else {
 			return nil, err
@@ -90,8 +102,8 @@ func (d *Database) GetCollectionByID(id RowID) (*Collection, error) {
 // GetCollectionByName returns (nil, nil) if the error is only that no such row exists.
 func (d *Database) GetCollectionByName(name string) (*Collection, error) {
 	c := Collection{}
-	if err := d.db.Get(&c, `SELECT rowid, * FROM collection WHERE name = ? LIMIT 1`, name); err != nil {
-		if err == sql.ErrNoRows {
+	if err := d.db.Take(&c, "name = ?", name).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
 			return nil, nil
 		} else {
 			return nil, err
@@ -103,99 +115,72 @@ func (d *Database) GetCollectionByName(name string) (*Collection, error) {
 
 // InsertCollection will add a new collection to the database, overwriting Collection.ID with the new row ID.
 func (d *Database) InsertCollection(c *Collection) error {
-	if res, err := d.db.NamedExec(`INSERT INTO collection (name, path) VALUES (:name, :path)`, c); err != nil {
+	if err := d.db.Create(c).Error; err != nil {
 		return err
-	} else if c.ID, err = res.LastInsertId(); err != nil {
-		return err
+	} else {
+		return nil
 	}
-	return nil
 }
 
 // UpdateCollection will set all non-ID values in the database row identified by Collection.ID.
 func (d *Database) UpdateCollection(c *Collection) error {
-	if res, err := d.db.NamedExec(`UPDATE collection SET name = :name, path = :path WHERE rowid = :rowid`, c); err != nil {
+	if err := d.db.Save(c).Error; err != nil {
 		return err
-	} else if count, err := res.RowsAffected(); err != nil {
-		return err
-	} else if count == 0 {
-		return sql.ErrNoRows
 	} else {
 		return nil
 	}
-}
-
-// RefreshCollection will reload the collection information from the database.
-func (d *Database) RefreshCollection(c *Collection) error {
-	return d.db.Get(c, `SELECT * FROM collection WHERE rowid = ?`, c.ID)
 }
 
 // DeleteCollection will delete the collection and all its downloads.
 func (d *Database) DeleteCollection(id RowID) error {
-	tx := d.db.MustBegin()
-	defer tx.Rollback()
-	if _, err := tx.Exec(`DELETE FROM download WHERE collection_id = ?`, id); err != nil {
-		return fmt.Errorf("failed to delete downloads: %w", err)
-	}
-	if _, err := tx.Exec(`DELETE FROM collection WHERE rowid = ?`, id); err != nil {
-		return fmt.Errorf("failed to delete collection: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit: %w", err)
-	}
-	return nil
+	return d.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&Download{}, "collection_id = ?", id).Error; err != nil {
+			return fmt.Errorf("failed to delete dowloads: %w", err)
+		} else if err := tx.Delete(&Collection{}, id).Error; err != nil {
+			return fmt.Errorf("failed to delete collection: %w", err)
+		} else {
+			return nil
+		}
+	})
 }
 
 func (d *Database) GetDownloadsByCollectionID(id RowID) ([]Download, error) {
 	var downloads []Download
-	if err := d.db.Select(&downloads, `SELECT rowid, * FROM download WHERE collection_id = ? ORDER BY added DESC`, id); err != nil {
+	if err := d.db.Find(&downloads, "collection_id = ?", id).Error; err != nil {
 		return nil, err
+	} else {
+		return downloads, nil
 	}
-	return downloads, nil
 }
 
 // InsertDownload will add a new download to the database, overwriting any auto-generated attributes with those from the database.
 func (d *Database) InsertDownload(download *Download) error {
-	if res, err := d.db.NamedExec(`INSERT INTO download (collection_id, url) VALUES (:collection_id, :url)`, download); err != nil {
+	if err := d.db.Create(download).Error; err != nil {
 		return err
-	} else if download.ID, err = res.LastInsertId(); err != nil {
-		return err
-	} else if err = d.RefreshDownload(download); err != nil {
-		return err
+	} else {
+		return nil
 	}
-	return nil
 }
 
 // UpdateDownload will set all non-ID values in the database row identified by Download.ID.
 func (d *Database) UpdateDownload(download *Download) error {
-	if res, err := d.db.NamedExec(`UPDATE download SET url = :url, state = :state WHERE rowid = :rowid`, download); err != nil {
+	if err := d.db.Save(download).Error; err != nil {
 		return err
-	} else if count, err := res.RowsAffected(); err != nil {
-		return err
-	} else if count == 0 {
-		return sql.ErrNoRows
 	} else {
 		return nil
 	}
-}
-
-// RefreshDownload will reload the download information from teh database.
-func (d *Database) RefreshDownload(download *Download) error {
-	return d.db.Get(download, `SELECT * FROM download WHERE rowid = ?`, download.ID)
 }
 
 // DeleteDownload will delete the download with the specified ID.
 func (d *Database) DeleteDownload(id RowID) error {
-	if _, err := d.db.Exec(`DELETE FROM download WHERE rowid = ?`, id); err != nil {
-		return err
-	} else {
-		return nil
-	}
+	return d.db.Delete(&Download{}, id).Error
 }
 
 type Collection struct {
-	ID   RowID `db:"rowid"`
-	Name string
-	Path string
+	ID        RowID `gorm:"primaryKey;default:(-);->"`
+	Name      string
+	Path      string
+	Downloads []Download `gorm:"foreignKey:CollectionID"`
 }
 
 type DownloadState string
@@ -209,9 +194,9 @@ const (
 )
 
 type Download struct {
-	ID           RowID `db:"rowid"`
-	CollectionID RowID `db:"collection_id"`
+	ID           RowID `gorm:"primaryKey;default:(-);->"`
+	CollectionID RowID `gorm:"column:collection_id"`
 	URL          string
-	Added        time.Time
-	State        DownloadState
+	Added        time.Time     `gorm:"default:(-);->"`
+	State        DownloadState `gorm:"default:(-)"`
 }
