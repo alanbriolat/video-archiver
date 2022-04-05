@@ -15,12 +15,12 @@ func (r *ValidationResult) IsOk() bool {
 	return len(r.errors) == 0
 }
 
-func (r *ValidationResult) AddError(key, msg string) {
+func (r *ValidationResult) AddError(key, format string, args ...interface{}) {
 	if r.errors == nil {
 		r.errors = make(map[string][]string)
 	}
 	errors, _ := r.errors[key]
-	r.errors[key] = append(errors, msg)
+	r.errors[key] = append(errors, fmt.Sprintf(format, args...))
 }
 
 func (r *ValidationResult) HasErrors(key string) bool {

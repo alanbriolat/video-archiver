@@ -41,13 +41,12 @@ func newCollectionEditDialog() *collectionEditDialog {
 	return d
 }
 
-func (d *collectionEditDialog) reset() {
-	d.Path.UnselectAll()
-	d.Name.SetText("")
-	d.Name.SetPlaceholderText("")
-}
-
 func (d *collectionEditDialog) run(c *database.Collection) bool {
+	if c.ID == database.NullRowID {
+		d.Dialog.SetTitle("New collection")
+	} else {
+		d.Dialog.SetTitle("Edit collection")
+	}
 	if c.Path == "" {
 		d.Path.UnselectAll()
 	} else {

@@ -15,6 +15,7 @@ const (
 	COLLECTION_COLUMN_ID = iota
 	COLLECTION_COLUMN_NAME
 	COLLECTION_COLUMN_PATH
+	COLLECTION_COLUMN_ID_STR
 )
 
 type collectionManager struct {
@@ -218,8 +219,8 @@ func (c *collection) updateView() error {
 	} else {
 		err := model.(*gtk.ListStore).Set(
 			iter,
-			[]int{COLLECTION_COLUMN_ID, COLLECTION_COLUMN_NAME, COLLECTION_COLUMN_PATH},
-			[]interface{}{c.ID, c.Name, c.Path},
+			[]int{COLLECTION_COLUMN_ID, COLLECTION_COLUMN_NAME, COLLECTION_COLUMN_PATH, COLLECTION_COLUMN_ID_STR},
+			[]interface{}{c.ID, c.Name, c.Path, fmt.Sprintf("%d", c.ID)},
 		)
 		if err != nil {
 			return fmt.Errorf("failed to update store: %w", err)

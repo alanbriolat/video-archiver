@@ -19,6 +19,8 @@ var embedMigrations embed.FS
 
 type RowID = int64
 
+const NullRowID RowID = 0
+
 type Database struct {
 	db *sqlx.DB
 }
@@ -159,6 +161,19 @@ func (d *Database) InsertDownload(download *Download) error {
 		return err
 	}
 	return nil
+}
+
+// UpdateDownload will set all non-ID values in the database row identified by Download.ID.
+func (d *Database) UpdateDownload(download *Download) error {
+	if res, err := d.db.NamedExec(`UPDATE download SET url = :url, state = :state WHERE rowid = :rowid`, download); err != nil {
+		return err
+	} else if count, err := res.RowsAffected(); err != nil {
+		return err
+	} else if count == 0 {
+		return sql.ErrNoRows
+	} else {
+		return nil
+	}
 }
 
 // RefreshDownload will reload the download information from teh database.

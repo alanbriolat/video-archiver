@@ -2,7 +2,7 @@ package gui
 
 import (
 	"fmt"
-	"log"
+	"strings"
 
 	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/glib"
@@ -27,6 +27,8 @@ type downloadManager struct {
 	downloads  map[database.RowID]*download
 	current    *download
 
+	actionNew   *glib.SimpleAction
+	actionEdit  *glib.SimpleAction
 	actionPaste *glib.SimpleAction
 
 	Store         *gtk.ListStore `glade:"store"`
@@ -37,6 +39,8 @@ type downloadManager struct {
 	BtnNew        *gtk.Button `glade:"btn_new"`
 	EntryNewURL   *gtk.Entry  `glade:"new_url"`
 
+	dlgEdit *downloadEditDialog
+
 	OnCurrentChanged func(*download)
 }
 
@@ -44,12 +48,16 @@ func (m *downloadManager) onAppActivate(app *application) {
 	m.app = app
 	m.downloads = make(map[database.RowID]*download)
 
+	m.actionNew = m.app.registerSimpleWindowAction("new_download", nil, m.onNewButtonClicked)
+	m.actionEdit = m.app.registerSimpleWindowAction("edit_download", nil, m.onEditButtonClicked)
+	m.actionEdit.SetEnabled(false)
 	m.actionPaste = m.app.registerSimpleWindowAction("paste_download", nil, m.onPasteButtonClicked)
 	m.app.gtkApplication.SetAccelsForAction("win.paste_download", []string{"<Primary>V"})
 	m.actionPaste.SetEnabled(false)
 
 	// Get additional GTK references
 	m.selection = generic.Unwrap(m.View.GetSelection())
+	m.dlgEdit = newDownloadEditDialog(m.app.Collections.Store)
 
 	m.selection.SetMode(gtk.SELECTION_SINGLE)
 	m.selection.Connect("changed", m.onViewSelectionChanged)
@@ -60,7 +68,10 @@ func (m *downloadManager) onAppActivate(app *application) {
 
 func (m *downloadManager) mustRefresh() {
 	m.downloads = make(map[database.RowID]*download)
-	m.unsetCurrent()
+	m.selection.UnselectAll()
+	// Disable selection while we refresh the store, otherwise we get a load of spurious "changed" signals even though
+	// nothing should be selected...
+	m.selection.SetMode(gtk.SELECTION_NONE)
 	m.Store.Clear()
 	if m.collection == nil {
 		return
@@ -70,6 +81,7 @@ func (m *downloadManager) mustRefresh() {
 		m.downloads[d.ID] = d
 		generic.Unwrap_(d.addToStore(m.Store))
 	}
+	m.selection.SetMode(gtk.SELECTION_SINGLE)
 }
 
 func (m *downloadManager) onViewSelectionChanged(selection *gtk.TreeSelection) {
@@ -83,17 +95,61 @@ func (m *downloadManager) onViewSelectionChanged(selection *gtk.TreeSelection) {
 }
 
 func (m *downloadManager) onNewButtonClicked() {
-	text := generic.Unwrap(m.EntryNewURL.GetText())
-	err := m.addDownloadURL(text)
-	if err != nil {
-		m.app.runErrorDialog("Could not add download: %v", err)
-	} else {
-		m.EntryNewURL.SetText("")
+	d := database.Download{}
+	if m.collection != nil {
+		d.CollectionID = m.collection.ID
+	}
+	defer m.dlgEdit.hide()
+	for {
+		if !m.dlgEdit.run(&d) {
+			break
+		}
+		v := ValidationResult{}
+		if d.URL == "" {
+			v.AddError("url", "URL must not be empty")
+		} else if err := validateURL(d.URL); err != nil {
+			v.AddError("url", "Invalid URL: %v", err)
+		}
+		if d.CollectionID == database.NullRowID {
+			v.AddError("collection", "Must select a collection")
+		}
+		if v.IsOk() {
+			m.create(&d)
+			break
+		} else {
+			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
+		}
+	}
+}
+
+func (m *downloadManager) onEditButtonClicked() {
+	d := m.current.Download
+	defer m.dlgEdit.hide()
+	for {
+		if !m.dlgEdit.run(&d) {
+			break
+		}
+		v := ValidationResult{}
+		if d.URL == "" {
+			v.AddError("url", "URL must not be empty")
+		} else if err := validateURL(d.URL); err != nil {
+			v.AddError("url", "Invalid URL: %v", err)
+		}
+		if d.CollectionID != m.current.CollectionID {
+			v.AddError("collection", "Cannot change collection when editing a download")
+			d.CollectionID = m.current.CollectionID
+		}
+		if v.IsOk() {
+			m.current.Download = d
+			m.update(m.current)
+			break
+		} else {
+			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
+		}
 	}
 }
 
 func (m *downloadManager) onPasteButtonClicked() {
-	log.Println("onPasteButtonClicked")
 	// Get the clipboard text
 	clipboard := generic.Unwrap(gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD))
 	text := generic.Unwrap(clipboard.WaitForText())
@@ -125,6 +181,11 @@ func (m *downloadManager) create(dbDownload *database.Download) {
 	generic.Unwrap_(d.addToStore(m.Store))
 }
 
+func (m *downloadManager) update(d *download) {
+	generic.Unwrap_(m.app.database.UpdateDownload(&d.Download))
+	generic.Unwrap_(d.updateView())
+}
+
 func (m *downloadManager) setCollection(c *collection) {
 	if c == m.collection {
 		return
@@ -141,6 +202,7 @@ func (m *downloadManager) setCurrent(id database.RowID) {
 		return
 	}
 	m.current = m.downloads[id]
+	m.actionEdit.SetEnabled(true)
 	if m.OnCurrentChanged != nil {
 		m.OnCurrentChanged(m.current)
 	}
@@ -151,6 +213,7 @@ func (m *downloadManager) unsetCurrent() {
 		return
 	}
 	m.current = nil
+	m.actionEdit.SetEnabled(false)
 	if m.OnCurrentChanged != nil {
 		m.OnCurrentChanged(m.current)
 	}
