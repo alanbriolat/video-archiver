@@ -27,9 +27,10 @@ type downloadManager struct {
 	downloads  map[database.RowID]*download
 	current    *download
 
-	actionNew   *glib.SimpleAction
-	actionEdit  *glib.SimpleAction
-	actionPaste *glib.SimpleAction
+	actionNew    *glib.SimpleAction
+	actionPaste  *glib.SimpleAction
+	actionEdit   *glib.SimpleAction
+	actionDelete *glib.SimpleAction
 
 	Store         *gtk.ListStore `glade:"store"`
 	View          *gtk.TreeView  `glade:"tree"`
@@ -49,11 +50,13 @@ func (m *downloadManager) onAppActivate(app *application) {
 	m.downloads = make(map[database.RowID]*download)
 
 	m.actionNew = m.app.registerSimpleWindowAction("new_download", nil, m.onNewButtonClicked)
-	m.actionEdit = m.app.registerSimpleWindowAction("edit_download", nil, m.onEditButtonClicked)
-	m.actionEdit.SetEnabled(false)
 	m.actionPaste = m.app.registerSimpleWindowAction("paste_download", nil, m.onPasteButtonClicked)
 	m.app.gtkApplication.SetAccelsForAction("win.paste_download", []string{"<Primary>V"})
 	m.actionPaste.SetEnabled(false)
+	m.actionEdit = m.app.registerSimpleWindowAction("edit_download", nil, m.onEditButtonClicked)
+	m.actionEdit.SetEnabled(false)
+	m.actionDelete = m.app.registerSimpleWindowAction("delete_download", nil, m.onDeleteButtonClicked)
+	m.actionDelete.SetEnabled(false)
 
 	// Get additional GTK references
 	m.selection = generic.Unwrap(m.View.GetSelection())
@@ -160,6 +163,15 @@ func (m *downloadManager) onPasteButtonClicked() {
 	}
 }
 
+func (m *downloadManager) onDeleteButtonClicked() {
+	if !m.app.runWarningDialog("Are you sure you want to delete the download \"%v\"?", m.current.URL) {
+		return
+	}
+	generic.Unwrap_(m.app.database.DeleteDownload(m.current.ID))
+	generic.Unwrap_(m.current.removeFromStore())
+	m.selection.UnselectAll()
+}
+
 func (m *downloadManager) addDownloadURL(text string) error {
 	if text == "" {
 		return fmt.Errorf("no URL provided")
@@ -203,6 +215,7 @@ func (m *downloadManager) setCurrent(id database.RowID) {
 	}
 	m.current = m.downloads[id]
 	m.actionEdit.SetEnabled(true)
+	m.actionDelete.SetEnabled(true)
 	if m.OnCurrentChanged != nil {
 		m.OnCurrentChanged(m.current)
 	}
@@ -214,6 +227,7 @@ func (m *downloadManager) unsetCurrent() {
 	}
 	m.current = nil
 	m.actionEdit.SetEnabled(false)
+	m.actionDelete.SetEnabled(false)
 	if m.OnCurrentChanged != nil {
 		m.OnCurrentChanged(m.current)
 	}
@@ -236,6 +250,20 @@ func (d *download) addToStore(store *gtk.ListStore) error {
 	} else {
 		d.treeRef = treeRef
 		return d.updateView()
+	}
+}
+
+// TODO: remove duplication
+func (d *download) removeFromStore() error {
+	if d.treeRef == nil {
+		return fmt.Errorf("collection not in store")
+	} else if model, err := d.treeRef.GetModel(); err != nil {
+		return fmt.Errorf("failed to get view model: %w", err)
+	} else if iter, err := model.ToTreeModel().GetIter(d.treeRef.GetPath()); err != nil {
+		return fmt.Errorf("failed to get store iter: %w", err)
+	} else {
+		model.(*gtk.ListStore).Remove(iter)
+		return nil
 	}
 }
 

@@ -181,6 +181,15 @@ func (d *Database) RefreshDownload(download *Download) error {
 	return d.db.Get(download, `SELECT * FROM download WHERE rowid = ?`, download.ID)
 }
 
+// DeleteDownload will delete the download with the specified ID.
+func (d *Database) DeleteDownload(id RowID) error {
+	if _, err := d.db.Exec(`DELETE FROM download WHERE rowid = ?`, id); err != nil {
+		return err
+	} else {
+		return nil
+	}
+}
+
 type Collection struct {
 	ID   RowID `db:"rowid"`
 	Name string

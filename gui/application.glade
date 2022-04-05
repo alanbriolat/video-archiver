@@ -52,7 +52,7 @@
                 <property name="action_name">win.new_collection</property>
                 <property name="label" translatable="yes">New collection</property>
                 <property name="use_underline">True</property>
-                <property name="stock_id">gtk-add</property>
+                <property name="stock_id">gtk-open</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -67,7 +67,7 @@
                 <property name="action_name">win.edit_collection</property>
                 <property name="label" translatable="yes">Edit collection</property>
                 <property name="use_underline">True</property>
-                <property name="stock_id">gtk-edit</property>
+                <property name="stock_id">gtk-properties</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -107,7 +107,22 @@
                 <property name="action_name">win.new_download</property>
                 <property name="label" translatable="yes">New download</property>
                 <property name="use_underline">True</property>
-                <property name="stock_id">gtk-new</property>
+                <property name="stock_id">gtk-add</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="homogeneous">True</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkToolButton">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="tooltip_text" translatable="yes">Paste download URL</property>
+                <property name="action_name">win.paste_download</property>
+                <property name="label" translatable="yes">Paste URL</property>
+                <property name="use_underline">True</property>
+                <property name="stock_id">gtk-paste</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -133,11 +148,11 @@
               <object class="GtkToolButton">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="tooltip_text" translatable="yes">Paste download URL</property>
-                <property name="action_name">win.paste_download</property>
-                <property name="label" translatable="yes">Paste URL</property>
+                <property name="tooltip_text" translatable="yes">Delete selected download</property>
+                <property name="action_name">win.delete_download</property>
+                <property name="label" translatable="yes">Delete download</property>
                 <property name="use_underline">True</property>
-                <property name="stock_id">gtk-paste</property>
+                <property name="stock_id">gtk-remove</property>
               </object>
               <packing>
                 <property name="expand">False</property>
