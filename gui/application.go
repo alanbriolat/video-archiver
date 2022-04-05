@@ -93,8 +93,8 @@ type application struct {
 	applicationBuilder
 	cancel         context.CancelFunc
 	database       *database.Database
-	collections    *collectionManager
-	downloads      *downloadManager
+	Collections    collectionManager `glade:"collections_"`
+	Downloads      downloadManager   `glade:"downloads_"`
 	gtkApplication *gtk.Application
 	Window         *gtk.ApplicationWindow `glade:"window_main"`
 }
@@ -170,18 +170,18 @@ func (a *application) onActivate() {
 	builder.MustBuild(a)
 	a.Window.SetApplication(a.gtkApplication)
 
-	a.downloads = newDownloadManager(a, builder)
-	a.downloads.OnCurrentChanged = func(d *download) {
+	a.Downloads.onAppActivate(a)
+	a.Downloads.OnCurrentChanged = func(d *download) {
 		log.Printf("selected download changed: %v", d)
 	}
-	a.collections = newCollectionManager(a, builder)
-	a.collections.OnCurrentChanged = func(c *collection) {
+	a.Collections.onAppActivate(a)
+	a.Collections.OnCurrentChanged = func(c *collection) {
 		log.Printf("selected collection changed: %v", c)
-		a.downloads.setCollection(c)
+		a.Downloads.setCollection(c)
 	}
 
 	a.Window.Show()
-	a.collections.mustRefresh()
+	a.Collections.mustRefresh()
 }
 
 func (a *application) onShutdown() {

@@ -9,7 +9,6 @@ import (
 
 	"github.com/alanbriolat/video-archiver/database"
 	"github.com/alanbriolat/video-archiver/generic"
-	"github.com/alanbriolat/video-archiver/glade"
 )
 
 const (
@@ -28,8 +27,8 @@ type collectionManager struct {
 	actionEdit   *glib.SimpleAction
 	actionDelete *glib.SimpleAction
 
-	Store     *gtk.ListStore `glade:"list_store_collections"`
-	View      *gtk.TreeView  `glade:"tree_collections"`
+	Store     *gtk.ListStore `glade:"store"`
+	View      *gtk.TreeView  `glade:"tree"`
 	selection *gtk.TreeSelection
 
 	dlgEdit *collectionEditDialog
@@ -37,11 +36,9 @@ type collectionManager struct {
 	OnCurrentChanged func(*collection)
 }
 
-func newCollectionManager(app *application, builder glade.Builder) *collectionManager {
-	m := &collectionManager{
-		app:         app,
-		collections: make(map[database.RowID]*collection),
-	}
+func (m *collectionManager) onAppActivate(app *application) {
+	m.app = app
+	m.collections = make(map[database.RowID]*collection)
 
 	m.actionNew = m.app.registerSimpleWindowAction("new_collection", nil, m.onNewButtonClicked)
 	m.actionEdit = m.app.registerSimpleWindowAction("edit_collection", nil, m.onEditButtonClicked)
@@ -49,15 +46,12 @@ func newCollectionManager(app *application, builder glade.Builder) *collectionMa
 	m.actionDelete = m.app.registerSimpleWindowAction("delete_collection", nil, m.onDeleteButtonClicked)
 	m.actionDelete.SetEnabled(false)
 
-	// Get widget references from the builder
-	builder.MustBuild(m)
+	// Get additional GTK references
 	m.selection = generic.Unwrap(m.View.GetSelection())
 	m.dlgEdit = newCollectionEditDialog()
 
 	m.selection.SetMode(gtk.SELECTION_SINGLE)
 	m.selection.Connect("changed", m.onViewSelectionChanged)
-
-	return m
 }
 
 func (m *collectionManager) mustRefresh() {

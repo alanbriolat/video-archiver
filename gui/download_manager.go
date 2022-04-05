@@ -10,7 +10,6 @@ import (
 
 	"github.com/alanbriolat/video-archiver/database"
 	"github.com/alanbriolat/video-archiver/generic"
-	"github.com/alanbriolat/video-archiver/glade"
 )
 
 const (
@@ -30,29 +29,26 @@ type downloadManager struct {
 
 	actionPaste *glib.SimpleAction
 
-	Store         *gtk.ListStore `glade:"list_store_downloads"`
-	View          *gtk.TreeView  `glade:"tree_downloads"`
+	Store         *gtk.ListStore `glade:"store"`
+	View          *gtk.TreeView  `glade:"tree"`
 	selection     *gtk.TreeSelection
-	PaneDownloads *gtk.Paned  `glade:"pane_downloads"`
-	PaneDetails   *gtk.Box    `glade:"pane_download_details"`
-	BtnNew        *gtk.Button `glade:"btn_new_download"`
-	EntryNewURL   *gtk.Entry  `glade:"entry_new_download_url"`
+	PaneDownloads *gtk.Paned  `glade:"pane"`
+	PaneDetails   *gtk.Box    `glade:"details_pane"`
+	BtnNew        *gtk.Button `glade:"btn_new"`
+	EntryNewURL   *gtk.Entry  `glade:"new_url"`
 
 	OnCurrentChanged func(*download)
 }
 
-func newDownloadManager(app *application, builder glade.Builder) *downloadManager {
-	m := &downloadManager{
-		app:       app,
-		downloads: make(map[database.RowID]*download),
-	}
+func (m *downloadManager) onAppActivate(app *application) {
+	m.app = app
+	m.downloads = make(map[database.RowID]*download)
 
 	m.actionPaste = m.app.registerSimpleWindowAction("paste_download", nil, m.onPasteButtonClicked)
 	m.app.gtkApplication.SetAccelsForAction("win.paste_download", []string{"<Primary>V"})
 	m.actionPaste.SetEnabled(false)
 
-	// Get widget references from the builder
-	builder.MustBuild(m)
+	// Get additional GTK references
 	m.selection = generic.Unwrap(m.View.GetSelection())
 
 	m.selection.SetMode(gtk.SELECTION_SINGLE)
@@ -60,8 +56,6 @@ func newDownloadManager(app *application, builder glade.Builder) *downloadManage
 	m.PaneDownloads.SetVisible(false)
 	m.PaneDetails.SetVisible(false)
 	m.BtnNew.Connect("clicked", m.onNewButtonClicked)
-
-	return m
 }
 
 func (m *downloadManager) mustRefresh() {

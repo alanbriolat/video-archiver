@@ -2,7 +2,7 @@
 <!-- Generated with glade 3.22.2 -->
 <interface>
   <requires lib="gtk+" version="3.20"/>
-  <object class="GtkListStore" id="list_store_collections">
+  <object class="GtkListStore" id="collections_store">
     <columns>
       <!-- column-name id -->
       <column type="gint64"/>
@@ -12,7 +12,7 @@
       <column type="gchararray"/>
     </columns>
   </object>
-  <object class="GtkListStore" id="list_store_downloads">
+  <object class="GtkListStore" id="downloads_store">
     <columns>
       <!-- column-name id -->
       <column type="gint64"/>
@@ -148,10 +148,10 @@
                 <property name="can_focus">False</property>
                 <property name="orientation">vertical</property>
                 <child>
-                  <object class="GtkTreeView" id="tree_collections">
+                  <object class="GtkTreeView" id="collections_tree">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="model">list_store_collections</property>
+                    <property name="model">collections_store</property>
                     <property name="search_column">1</property>
                     <property name="activate_on_single_click">True</property>
                     <child internal-child="selection">
@@ -195,7 +195,7 @@
               </packing>
             </child>
             <child>
-              <object class="GtkPaned" id="pane_downloads">
+              <object class="GtkPaned" id="downloads_pane">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="orientation">vertical</property>
@@ -208,10 +208,10 @@
                     <property name="can_focus">False</property>
                     <property name="orientation">vertical</property>
                     <child>
-                      <object class="GtkTreeView" id="tree_downloads">
+                      <object class="GtkTreeView" id="downloads_tree">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="model">list_store_downloads</property>
+                        <property name="model">downloads_store</property>
                         <property name="enable_search">False</property>
                         <property name="search_column">0</property>
                         <child internal-child="selection">
@@ -280,7 +280,7 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <child>
-                          <object class="GtkEntry" id="entry_new_download_url">
+                          <object class="GtkEntry" id="downloads_new_url">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="placeholder_text" translatable="yes">https://example.com/videos/12345</property>
@@ -293,7 +293,7 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkButton" id="btn_new_download">
+                          <object class="GtkButton" id="downloads_btn_new">
                             <property name="label" translatable="yes">Add</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
@@ -319,7 +319,7 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkBox" id="pane_download_details">
+                  <object class="GtkBox" id="downloads_details_pane">
                     <property name="can_focus">False</property>
                     <property name="orientation">vertical</property>
                     <child>
