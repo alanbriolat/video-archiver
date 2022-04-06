@@ -189,7 +189,10 @@ func (s *DownloadState) String() string {
 }
 
 const (
-	DOWNLOAD_STATE_NEW DownloadState = "new"
+	DownloadStateNew         DownloadState = "new"
+	DownloadStateDownloading DownloadState = "downloading"
+	DownloadStateComplete    DownloadState = "complete"
+	DownloadStateError       DownloadState = "error"
 )
 
 type Download struct {

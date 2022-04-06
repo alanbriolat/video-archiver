@@ -20,6 +20,18 @@ const (
 	DOWNLOAD_COLUMN_PROGRESS
 )
 
+type actionGroup []*glib.SimpleAction
+
+func newActionGroup(actions ...*glib.SimpleAction) actionGroup {
+	return actions
+}
+
+func (g actionGroup) setEnabled(enabled bool) {
+	for _, a := range g {
+		a.SetEnabled(enabled)
+	}
+}
+
 type downloadManager struct {
 	app *application
 
@@ -27,18 +39,20 @@ type downloadManager struct {
 	downloads  map[database.RowID]*download
 	current    *download
 
-	actionNew    *glib.SimpleAction
-	actionPaste  *glib.SimpleAction
-	actionEdit   *glib.SimpleAction
-	actionDelete *glib.SimpleAction
+	actionNew         *glib.SimpleAction
+	actionPaste       *glib.SimpleAction
+	actionEdit        *glib.SimpleAction
+	actionDelete      *glib.SimpleAction
+	actionStart       *glib.SimpleAction
+	actionStop        *glib.SimpleAction
+	collectionActions actionGroup
+	downloadActions   actionGroup
 
 	Store         *gtk.ListStore `glade:"store"`
 	View          *gtk.TreeView  `glade:"tree"`
 	selection     *gtk.TreeSelection
-	PaneDownloads *gtk.Paned  `glade:"pane"`
-	PaneDetails   *gtk.Box    `glade:"details_pane"`
-	BtnNew        *gtk.Button `glade:"btn_new"`
-	EntryNewURL   *gtk.Entry  `glade:"new_url"`
+	PaneDownloads *gtk.Paned `glade:"pane"`
+	PaneDetails   *gtk.Box   `glade:"details_pane"`
 
 	dlgEdit *downloadEditDialog
 
@@ -49,14 +63,20 @@ func (m *downloadManager) onAppActivate(app *application) {
 	m.app = app
 	m.downloads = make(map[database.RowID]*download)
 
-	m.actionNew = m.app.registerSimpleWindowAction("new_download", nil, m.onNewButtonClicked)
-	m.actionPaste = m.app.registerSimpleWindowAction("paste_download", nil, m.onPasteButtonClicked)
+	m.actionNew = m.app.registerSimpleWindowAction("new_download", nil, m.onActionNew)
+	m.actionPaste = m.app.registerSimpleWindowAction("paste_download", nil, m.onActionPaste)
 	m.app.gtkApplication.SetAccelsForAction("win.paste_download", []string{"<Primary>V"})
-	m.actionPaste.SetEnabled(false)
-	m.actionEdit = m.app.registerSimpleWindowAction("edit_download", nil, m.onEditButtonClicked)
-	m.actionEdit.SetEnabled(false)
-	m.actionDelete = m.app.registerSimpleWindowAction("delete_download", nil, m.onDeleteButtonClicked)
-	m.actionDelete.SetEnabled(false)
+	m.actionEdit = m.app.registerSimpleWindowAction("edit_download", nil, m.onActionEdit)
+	m.actionDelete = m.app.registerSimpleWindowAction("delete_download", nil, m.onActionDelete)
+	m.actionStart = m.app.registerSimpleWindowAction("start_download", nil, m.onActionStart)
+	m.actionStop = m.app.registerSimpleWindowAction("stop_download", nil, m.onActionStop)
+
+	// Actions that require a collection to be selected
+	m.collectionActions = newActionGroup(m.actionPaste)
+	m.collectionActions.setEnabled(false)
+	// Actions that require a download to be selected
+	m.downloadActions = newActionGroup(m.actionEdit, m.actionDelete, m.actionStart, m.actionStop)
+	m.downloadActions.setEnabled(false)
 
 	// Get additional GTK references
 	m.selection = generic.Unwrap(m.View.GetSelection())
@@ -66,7 +86,6 @@ func (m *downloadManager) onAppActivate(app *application) {
 	m.selection.Connect("changed", m.onViewSelectionChanged)
 	m.PaneDownloads.SetVisible(false)
 	m.PaneDetails.SetVisible(false)
-	m.BtnNew.Connect("clicked", m.onNewButtonClicked)
 }
 
 func (m *downloadManager) mustRefresh() {
@@ -97,7 +116,7 @@ func (m *downloadManager) onViewSelectionChanged(selection *gtk.TreeSelection) {
 	}
 }
 
-func (m *downloadManager) onNewButtonClicked() {
+func (m *downloadManager) onActionNew() {
 	d := database.Download{}
 	if m.collection != nil {
 		d.CollectionID = m.collection.ID
@@ -125,7 +144,7 @@ func (m *downloadManager) onNewButtonClicked() {
 	}
 }
 
-func (m *downloadManager) onEditButtonClicked() {
+func (m *downloadManager) onActionEdit() {
 	d := m.current.Download
 	defer m.dlgEdit.hide()
 	for {
@@ -152,7 +171,7 @@ func (m *downloadManager) onEditButtonClicked() {
 	}
 }
 
-func (m *downloadManager) onPasteButtonClicked() {
+func (m *downloadManager) onActionPaste() {
 	// Get the clipboard text
 	clipboard := generic.Unwrap(gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD))
 	text := generic.Unwrap(clipboard.WaitForText())
@@ -163,13 +182,21 @@ func (m *downloadManager) onPasteButtonClicked() {
 	}
 }
 
-func (m *downloadManager) onDeleteButtonClicked() {
+func (m *downloadManager) onActionDelete() {
 	if !m.app.runWarningDialog("Are you sure you want to delete the download \"%v\"?", m.current.URL) {
 		return
 	}
 	generic.Unwrap_(m.app.database.DeleteDownload(m.current.ID))
 	generic.Unwrap_(m.current.removeFromStore())
 	m.selection.UnselectAll()
+}
+
+func (m *downloadManager) onActionStart() {
+
+}
+
+func (m *downloadManager) onActionStop() {
+
 }
 
 func (m *downloadManager) addDownloadURL(text string) error {
@@ -205,7 +232,7 @@ func (m *downloadManager) setCollection(c *collection) {
 	m.collection = c
 	enabled := m.collection != nil
 	m.PaneDownloads.SetVisible(enabled)
-	m.actionPaste.SetEnabled(enabled)
+	m.collectionActions.setEnabled(enabled)
 	m.mustRefresh()
 }
 
@@ -214,8 +241,7 @@ func (m *downloadManager) setCurrent(id database.RowID) {
 		return
 	}
 	m.current = m.downloads[id]
-	m.actionEdit.SetEnabled(true)
-	m.actionDelete.SetEnabled(true)
+	m.downloadActions.setEnabled(true)
 	if m.OnCurrentChanged != nil {
 		m.OnCurrentChanged(m.current)
 	}
@@ -226,8 +252,7 @@ func (m *downloadManager) unsetCurrent() {
 		return
 	}
 	m.current = nil
-	m.actionEdit.SetEnabled(false)
-	m.actionDelete.SetEnabled(false)
+	m.downloadActions.setEnabled(false)
 	if m.OnCurrentChanged != nil {
 		m.OnCurrentChanged(m.current)
 	}
@@ -276,10 +301,16 @@ func (d *download) updateView() error {
 	} else if iter, err := model.ToTreeModel().GetIter(d.treeRef.GetPath()); err != nil {
 		return fmt.Errorf("failed to get store iter: %w", err)
 	} else {
+		var progress int
+		if d.State == database.DownloadStateComplete {
+			progress = 100
+		} else {
+			progress = d.progress
+		}
 		err := model.(*gtk.ListStore).Set(
 			iter,
 			[]int{DOWNLOAD_COLUMN_ID, DOWNLOAD_COLUMN_URL, DOWNLOAD_COLUMN_ADDED, DOWNLOAD_COLUMN_STATE, DOWNLOAD_COLUMN_PROGRESS},
-			[]interface{}{d.ID, d.URL, d.Added.Format("2006-01-02 15:04:05"), d.State.String(), d.progress},
+			[]interface{}{d.ID, d.URL, d.Added.Format("2006-01-02 15:04:05"), d.State.String(), progress},
 		)
 		if err != nil {
 			return fmt.Errorf("failed to update store: %w", err)
