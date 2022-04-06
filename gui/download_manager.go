@@ -18,6 +18,8 @@ const (
 	DOWNLOAD_COLUMN_ADDED
 	DOWNLOAD_COLUMN_STATE
 	DOWNLOAD_COLUMN_PROGRESS
+	DOWNLOAD_COLUMN_NAME
+	DOWNLOAD_COLUMN_TOOLTIP
 )
 
 type actionGroup []*glib.SimpleAction
@@ -261,6 +263,7 @@ func (m *downloadManager) unsetCurrent() {
 type download struct {
 	database.Download
 	progress int
+	err      error
 	treeRef  *gtk.TreeRowReference
 }
 
@@ -301,22 +304,53 @@ func (d *download) updateView() error {
 	} else if iter, err := model.ToTreeModel().GetIter(d.treeRef.GetPath()); err != nil {
 		return fmt.Errorf("failed to get store iter: %w", err)
 	} else {
-		var progress int
-		if d.State == database.DownloadStateComplete {
-			progress = 100
-		} else {
-			progress = d.progress
-		}
 		err := model.(*gtk.ListStore).Set(
 			iter,
-			[]int{DOWNLOAD_COLUMN_ID, DOWNLOAD_COLUMN_URL, DOWNLOAD_COLUMN_ADDED, DOWNLOAD_COLUMN_STATE, DOWNLOAD_COLUMN_PROGRESS},
-			[]interface{}{d.ID, d.URL, d.Added.Format("2006-01-02 15:04:05"), d.State.String(), progress},
+			[]int{
+				DOWNLOAD_COLUMN_ID,
+				DOWNLOAD_COLUMN_URL,
+				DOWNLOAD_COLUMN_ADDED,
+				DOWNLOAD_COLUMN_STATE,
+				DOWNLOAD_COLUMN_PROGRESS,
+				DOWNLOAD_COLUMN_NAME,
+				DOWNLOAD_COLUMN_TOOLTIP,
+			},
+			[]interface{}{
+				d.ID,
+				d.URL,
+				// TODO: get in current timezone
+				d.Added.Format("2006-01-02 15:04:05"),
+				d.State.String(),
+				d.getDisplayProgress(),
+				d.getDisplayName(),
+				d.getDisplayTooltip(),
+			},
 		)
 		if err != nil {
 			return fmt.Errorf("failed to update store: %w", err)
 		} else {
 			return nil
 		}
+	}
+}
+
+func (d *download) getDisplayProgress() int {
+	if d.State == database.DownloadStateComplete {
+		return 100
+	} else {
+		return d.progress
+	}
+}
+
+func (d *download) getDisplayName() string {
+	return d.URL
+}
+
+func (d *download) getDisplayTooltip() string {
+	if d.err != nil {
+		return fmt.Sprintf("%v\n\n%v", d.URL, d.err)
+	} else {
+		return d.URL
 	}
 }
 
