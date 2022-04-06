@@ -24,6 +24,7 @@ func main() {
 		log.Fatalf("can't initialize zap logger: %v", err)
 	}
 	defer logger.Sync()
+	zap.RedirectStdLog(logger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

@@ -4,8 +4,9 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
-	"log"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
@@ -22,19 +23,20 @@ type RowID = int64
 const NullRowID RowID = 0
 
 type Database struct {
-	db *sqlx.DB
+	db  *sqlx.DB
+	log *zap.Logger
 }
 
-func NewDatabase(path string) (*Database, error) {
+func NewDatabase(path string, l *zap.Logger) (*Database, error) {
 	db, err := sqlx.Connect("sqlite3", path)
 	if err != nil {
 		return nil, err
 	}
-	return &Database{db}, nil
+	return &Database{db, l}, nil
 }
 
 func (d *Database) Migrate() error {
-	log.Println("running database migrations")
+	d.log.Info("running database migrations")
 	fs, err := iofs.New(embedMigrations, "migrations")
 	if err != nil {
 		return err
@@ -50,9 +52,9 @@ func (d *Database) Migrate() error {
 	err = m.Up()
 	switch err {
 	case nil:
-		log.Println("database migration complete")
+		d.log.Info("database migration complete")
 	case migrate.ErrNoChange:
-		log.Println("no database migration required")
+		d.log.Info("no database migration required")
 	default:
 		return err
 	}

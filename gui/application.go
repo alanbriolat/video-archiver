@@ -4,12 +4,12 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	"go.uber.org/zap"
 
 	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/database"
@@ -92,6 +92,7 @@ type Application interface {
 type application struct {
 	applicationBuilder
 	cancel         context.CancelFunc
+	log            *zap.Logger
 	database       *database.Database
 	Collections    collectionManager `glade:"collections_"`
 	Downloads      downloadManager   `glade:"downloads_"`
@@ -106,6 +107,7 @@ func (a *application) Init() error {
 	}
 
 	a.ctx, a.cancel = context.WithCancel(a.ctx)
+	a.log = video_archiver.Logger(a.ctx)
 
 	if err = os.MkdirAll(a.configPath, 0750); err != nil {
 		return fmt.Errorf("failed to create config path %v: %w", a.configPath, err)
@@ -113,7 +115,7 @@ func (a *application) Init() error {
 	if err = os.MkdirAll(filepath.Dir(a.dbPath), 0750); err != nil {
 		return fmt.Errorf("failed to create database %v: %w", a.dbPath, err)
 	}
-	if a.database, err = database.NewDatabase(a.dbPath); err != nil {
+	if a.database, err = database.NewDatabase(a.dbPath, a.log); err != nil {
 		return fmt.Errorf("failed to create database %v: %w", a.dbPath, err)
 	}
 	if err = a.database.Migrate(); err != nil {
@@ -160,11 +162,11 @@ func (a *application) Close() error {
 }
 
 func (a *application) onStartup() {
-	log.Println("application startup")
+	a.log.Info("application startup")
 }
 
 func (a *application) onActivate() {
-	log.Println("application activate")
+	a.log.Info("application activate")
 
 	builder := generic.Unwrap(GladeRepository.GetBuilder("application.glade"))
 	builder.MustBuild(a)
@@ -172,11 +174,11 @@ func (a *application) onActivate() {
 
 	a.Downloads.onAppActivate(a)
 	a.Downloads.OnCurrentChanged = func(d *download) {
-		log.Printf("selected download changed: %v", d)
+		a.log.Sugar().Infof("selected download changed: %v", d)
 	}
 	a.Collections.onAppActivate(a)
 	a.Collections.OnCurrentChanged = func(c *collection) {
-		log.Printf("selected collection changed: %v", c)
+		a.log.Sugar().Infof("selected collection changed: %v", c)
 		a.Downloads.setCollection(c)
 	}
 
@@ -185,7 +187,7 @@ func (a *application) onActivate() {
 }
 
 func (a *application) onShutdown() {
-	log.Println("application shutdown")
+	a.log.Info("application shutdown")
 	// Ensure context is cancelled no matter how the application shutdown was triggered
 	a.cancel()
 }

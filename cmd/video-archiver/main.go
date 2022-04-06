@@ -2,20 +2,32 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/signal"
 
+	"go.uber.org/zap"
+
+	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/generic"
 	"github.com/alanbriolat/video-archiver/gui"
 )
 
 func main() {
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		log.Fatalf("can't initialize logger: %v", err)
+	}
+	defer logger.Sync()
+	zap.RedirectStdLog(logger)
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	// Ensure the signal handler is cleaned up so repeated signals are less graceful
 	go func() {
 		<-ctx.Done()
 		stop()
 	}()
+	ctx = video_archiver.WithLogger(ctx, logger)
 
 	builder := gui.NewApplicationBuilder(gui.DefaultAppName, gui.DefaultAppID).WithContext(ctx)
 	app := generic.Unwrap(builder.Build())
