@@ -88,12 +88,12 @@ func (d *Database) GetAllCollections() ([]Collection, error) {
 // GetCollectionByID returns (nil, nil) if the error is only that no such row exists.
 func (d *Database) GetCollectionByID(id RowID) (*Collection, error) {
 	c := Collection{}
-	if err := d.db.Take(&c, "rowid = ?", id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, nil
-		} else {
-			return nil, err
-		}
+	res := d.db.Limit(1).Find(&c, "rowid = ?", id)
+	// TODO: reduce code duplication
+	if res.Error != nil {
+		return nil, res.Error
+	} else if res.RowsAffected == 0 {
+		return nil, nil
 	} else {
 		return &c, nil
 	}
@@ -102,12 +102,11 @@ func (d *Database) GetCollectionByID(id RowID) (*Collection, error) {
 // GetCollectionByName returns (nil, nil) if the error is only that no such row exists.
 func (d *Database) GetCollectionByName(name string) (*Collection, error) {
 	c := Collection{}
-	if err := d.db.Take(&c, "name = ?", name).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, nil
-		} else {
-			return nil, err
-		}
+	res := d.db.Limit(1).Find(&c, "name = ?", name)
+	if res.Error != nil {
+		return nil, res.Error
+	} else if res.RowsAffected == 0 {
+		return nil, nil
 	} else {
 		return &c, nil
 	}
