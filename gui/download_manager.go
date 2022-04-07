@@ -1,13 +1,17 @@
 package gui
 
 import (
+	"context"
 	"fmt"
+	"log"
+	"os"
 	"strings"
 
 	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 
+	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/database"
 	"github.com/alanbriolat/video-archiver/generic"
 )
@@ -70,6 +74,7 @@ func (m *downloadManager) onAppActivate(app *application) {
 	m.app.gtkApplication.SetAccelsForAction("win.paste_download", []string{"<Primary>V"})
 	m.actionEdit = m.app.registerSimpleWindowAction("edit_download", nil, m.onActionEdit)
 	m.actionDelete = m.app.registerSimpleWindowAction("delete_download", nil, m.onActionDelete)
+	// TODO: awareness of current download state
 	m.actionStart = m.app.registerSimpleWindowAction("start_download", nil, m.onActionStart)
 	m.actionStop = m.app.registerSimpleWindowAction("stop_download", nil, m.onActionStop)
 
@@ -193,7 +198,17 @@ func (m *downloadManager) onActionDelete() {
 }
 
 func (m *downloadManager) onActionStart() {
-
+	m.app.log.Info("onActionStart")
+	if m.current.cancel != nil {
+		m.app.log.Info("doing nothing, task in progress")
+	}
+	if m.current.match == nil {
+		m.current.doMatch(m.app.providerRegistry)
+	} else if m.current.resolved == nil {
+		m.current.doRecon(m.app.ctx)
+	} else if m.current.State == database.DownloadStateNew {
+		m.current.doDownload(m.app.ctx, generic.Unwrap(m.createDownloadBuilder()))
+	}
 }
 
 func (m *downloadManager) onActionStop() {
@@ -259,9 +274,25 @@ func (m *downloadManager) unsetCurrent() {
 	}
 }
 
+func (m *downloadManager) createDownloadBuilder() (video_archiver.DownloadBuilder, error) {
+	if m.collection == nil {
+		return nil, fmt.Errorf("no collection selected")
+	} else if m.current == nil {
+		return nil, fmt.Errorf("no download selected")
+	} else if m.collection.ID != m.current.CollectionID {
+		return nil, fmt.Errorf("selected download does not belong to selected collection")
+	}
+	prefix := strings.TrimRight(m.collection.Path, string(os.PathSeparator)) + string(os.PathSeparator)
+	builder := video_archiver.NewDownloadBuilder().WithTargetPrefix(prefix)
+	return builder, nil
+}
+
 type download struct {
 	database.Download
 	progress int
+	match    *video_archiver.Match
+	resolved video_archiver.ResolvedSource
+	cancel   context.CancelFunc
 	err      error
 	treeRef  *gtk.TreeRowReference
 }
@@ -342,15 +373,90 @@ func (d *download) getDisplayProgress() int {
 }
 
 func (d *download) getDisplayName() string {
-	return d.URL
+	if d.resolved != nil {
+		return d.resolved.String()
+	} else if d.match != nil {
+		return d.match.Source.String()
+	} else {
+		return d.URL
+	}
 }
 
 func (d *download) getDisplayTooltip() string {
+	// TODO: use a template string
 	if d.err != nil {
 		return fmt.Sprintf("%v\n\n%v", d.URL, d.err)
 	} else {
 		return d.URL
 	}
+}
+
+func (d *download) doMatch(r *video_archiver.ProviderRegistry) {
+	if d.match, d.err = r.Match(d.URL); d.err != nil {
+		d.err = fmt.Errorf("no match: %w", d.err)
+		d.State = database.DownloadStateError
+	}
+	log.Printf("match=%v err=%v", d.match, d.err)
+	generic.Unwrap_(d.updateView())
+}
+
+func (d *download) doRecon(ctx context.Context) {
+	logger := video_archiver.Logger(ctx).Sugar().With("id", d.ID, "url", d.URL)
+	if d.cancel != nil {
+		logger.Warn("skipping doRecon(), task already in progress")
+		return
+	} else if d.match == nil {
+		logger.Warn("skipping doRecon(), no provider match")
+		return
+	}
+	logger.Debug("starting recon")
+	ctx, d.cancel = context.WithCancel(ctx)
+	go func() {
+		defer func() { d.cancel = nil }()
+		if resolved, err := d.match.Source.Recon(ctx); err != nil {
+			logger.Errorf("failed to recon download: %v", err)
+			d.err = err
+			d.State = database.DownloadStateError
+		} else {
+			logger.Debug("recon complete")
+			d.resolved = resolved
+		}
+		glib.IdleAdd(func() { _ = d.updateView() })
+	}()
+}
+
+func (d *download) doDownload(ctx context.Context, builder video_archiver.DownloadBuilder) {
+	logger := video_archiver.Logger(ctx).Sugar().With("id", d.ID, "url", d.URL)
+	if d.cancel != nil {
+		logger.Warn("skipping download, task already in progress")
+		return
+	} else if d.resolved == nil {
+		logger.Warn("skipping download, recon not complete")
+		return
+	}
+	logger.Debug("starting download")
+	ctx, d.cancel = context.WithCancel(ctx)
+	builder = builder.WithContext(ctx).WithProgressCallback(func(downloaded int, expected int) {
+		d.progress = (downloaded * 100) / expected
+		glib.IdleAdd(func() { _ = d.updateView() })
+	})
+	d.State = database.DownloadStateDownloading
+	go func() {
+		defer func() { d.cancel = nil }()
+		if download, err := builder.Build(); err != nil {
+			logger.Errorf("failed to create download: %v", err)
+			d.err = err
+			d.State = database.DownloadStateError
+		} else if err := d.resolved.Download(download); err != nil {
+			logger.Errorf("failed to download: %v", err)
+			d.err = err
+			d.State = database.DownloadStateError
+		} else {
+			logger.Debug("download complete")
+			d.State = database.DownloadStateComplete
+		}
+		glib.IdleAdd(func() { _ = d.updateView() })
+	}()
 }
 
 func (d *download) String() string {
