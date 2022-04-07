@@ -25,10 +25,10 @@ func main() {
 	}
 	defer logger.Sync()
 	zap.RedirectStdLog(logger)
+	zap.ReplaceGlobals(logger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	ctx = video_archiver.WithLogger(ctx, logger)
 
 	app := &cli.App{
 		Name:  "download-video",
@@ -66,7 +66,7 @@ func main() {
 }
 
 func download(ctx context.Context, source string, target string) error {
-	logger := video_archiver.Logger(ctx).Sugar()
+	logger := zap.S()
 	logger.Infof("Downloading from %s into %s", source, target)
 
 	match, err := video_archiver.DefaultProviderRegistry.Match(source)

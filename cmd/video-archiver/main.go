@@ -8,7 +8,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/generic"
 	"github.com/alanbriolat/video-archiver/gui"
 	_ "github.com/alanbriolat/video-archiver/providers"
@@ -28,12 +27,9 @@ func main() {
 		<-ctx.Done()
 		stop()
 	}()
-	ctx = video_archiver.WithLogger(ctx, logger)
 
-	builder := gui.NewApplicationBuilder(gui.DefaultAppName, gui.DefaultAppID).WithContext(ctx)
-	app := generic.Unwrap(builder.Build())
-	generic.Unwrap_(app.Init())
-	defer app.Close()
+	env := generic.Unwrap(gui.NewEnvBuilder().Context(ctx).Logger(logger).UserConfigDir(gui.DefaultAppName).Build())
+	app := generic.Unwrap(gui.NewApplication(env, gui.DefaultAppID))
 
 	exitCode := app.Run()
 	os.Exit(exitCode)

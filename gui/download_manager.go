@@ -40,7 +40,7 @@ func (g actionGroup) setEnabled(enabled bool) {
 }
 
 type downloadManager struct {
-	app *application
+	app Application
 
 	collection *collection
 	downloads  map[database.RowID]*download
@@ -66,18 +66,18 @@ type downloadManager struct {
 	OnCurrentChanged func(*download)
 }
 
-func (m *downloadManager) onAppActivate(app *application) {
+func (m *downloadManager) onAppActivate(app Application, c *collectionManager) {
 	m.app = app
 	m.downloads = make(map[database.RowID]*download)
 
-	m.actionNew = m.app.registerSimpleWindowAction("new_download", nil, m.onActionNew)
-	m.actionPaste = m.app.registerSimpleWindowAction("paste_download", nil, m.onActionPaste)
-	m.app.gtkApplication.SetAccelsForAction("win.paste_download", []string{"<Primary>V"})
-	m.actionEdit = m.app.registerSimpleWindowAction("edit_download", nil, m.onActionEdit)
-	m.actionDelete = m.app.registerSimpleWindowAction("delete_download", nil, m.onActionDelete)
+	m.actionNew = m.app.RegisterSimpleWindowAction("new_download", nil, m.onActionNew)
+	m.actionPaste = m.app.RegisterSimpleWindowAction("paste_download", nil, m.onActionPaste)
+	m.app.SetWindowActionAccels("paste_download", []string{"<Primary>V"})
+	m.actionEdit = m.app.RegisterSimpleWindowAction("edit_download", nil, m.onActionEdit)
+	m.actionDelete = m.app.RegisterSimpleWindowAction("delete_download", nil, m.onActionDelete)
 	// TODO: awareness of current download state
-	m.actionStart = m.app.registerSimpleWindowAction("start_download", nil, m.onActionStart)
-	m.actionStop = m.app.registerSimpleWindowAction("stop_download", nil, m.onActionStop)
+	m.actionStart = m.app.RegisterSimpleWindowAction("start_download", nil, m.onActionStart)
+	m.actionStop = m.app.RegisterSimpleWindowAction("stop_download", nil, m.onActionStop)
 
 	// Actions that require a collection to be selected
 	m.collectionActions = newActionGroup(m.actionPaste)
@@ -88,7 +88,7 @@ func (m *downloadManager) onAppActivate(app *application) {
 
 	// Get additional GTK references
 	m.selection = generic.Unwrap(m.View.GetSelection())
-	m.dlgEdit = newDownloadEditDialog(m.app.Collections.Store)
+	m.dlgEdit = newDownloadEditDialog(c.Store)
 
 	m.selection.SetMode(gtk.SELECTION_SINGLE)
 	m.selection.Connect("changed", m.onViewSelectionChanged)
@@ -104,7 +104,7 @@ func (m *downloadManager) mustRefresh() {
 	m.selection.SetMode(gtk.SELECTION_NONE)
 	m.Store.Clear()
 	if m.collection != nil {
-		for _, dbDownload := range generic.Unwrap(m.app.database.GetDownloadsByCollectionID(m.collection.ID)) {
+		for _, dbDownload := range generic.Unwrap(m.app.DB().GetDownloadsByCollectionID(m.collection.ID)) {
 			d := &download{Download: dbDownload}
 			m.downloads[d.ID] = d
 			generic.Unwrap_(d.addToStore(m.Store))
@@ -185,30 +185,30 @@ func (m *downloadManager) onActionPaste() {
 	// Attempt to add the URL as a download
 	err := m.addDownloadURL(text)
 	if err != nil {
-		m.app.runErrorDialog("Could not add download: %v", err)
+		m.app.RunErrorDialog("Could not add download: %v", err)
 	}
 }
 
 func (m *downloadManager) onActionDelete() {
-	if !m.app.runWarningDialog("Are you sure you want to delete the download \"%v\"?", m.current.URL) {
+	if !m.app.RunWarningDialog("Are you sure you want to delete the download \"%v\"?", m.current.URL) {
 		return
 	}
-	generic.Unwrap_(m.app.database.DeleteDownload(m.current.ID))
+	generic.Unwrap_(m.app.DB().DeleteDownload(m.current.ID))
 	generic.Unwrap_(m.current.removeFromStore())
 	m.selection.UnselectAll()
 }
 
 func (m *downloadManager) onActionStart() {
-	m.app.log.Info("onActionStart")
+	m.app.Logger().Info("onActionStart")
 	if m.current.cancel != nil {
-		m.app.log.Info("doing nothing, task in progress")
+		m.app.Logger().Info("doing nothing, task in progress")
 	}
 	if m.current.Match == nil {
-		m.current.doMatch(m.app.providerRegistry)
+		m.current.doMatch(m.app)
 	} else if m.current.Resolved == nil {
-		m.current.doRecon(m.app.ctx)
+		m.current.doRecon(m.app)
 	} else if m.current.State == database.DownloadStateNew {
-		m.current.doDownload(m.app.ctx, generic.Unwrap(m.createDownloadBuilder()))
+		m.current.doDownload(m.app, generic.Unwrap(m.createDownloadBuilder()))
 	}
 }
 
@@ -231,14 +231,14 @@ func (m *downloadManager) addDownloadURL(text string) error {
 }
 
 func (m *downloadManager) create(dbDownload *database.Download) {
-	generic.Unwrap_(m.app.database.InsertDownload(dbDownload))
+	generic.Unwrap_(m.app.DB().InsertDownload(dbDownload))
 	d := &download{Download: *dbDownload}
 	m.downloads[d.ID] = d
 	generic.Unwrap_(d.addToStore(m.Store))
 }
 
 func (m *downloadManager) update(d *download) {
-	generic.Unwrap_(m.app.database.UpdateDownload(&d.Download))
+	generic.Unwrap_(m.app.DB().UpdateDownload(&d.Download))
 	generic.Unwrap_(d.updateView())
 }
 
@@ -389,8 +389,8 @@ func (d *download) getDisplayTooltip() string {
 	return sb.String()
 }
 
-func (d *download) doMatch(r *video_archiver.ProviderRegistry) {
-	if d.Match, d.Err = r.Match(d.URL); d.Err != nil {
+func (d *download) doMatch(app Application) {
+	if d.Match, d.Err = app.ProviderRegistry().Match(d.URL); d.Err != nil {
 		d.Err = fmt.Errorf("no match: %w", d.Err)
 		d.State = database.DownloadStateError
 	}
@@ -398,8 +398,8 @@ func (d *download) doMatch(r *video_archiver.ProviderRegistry) {
 	generic.Unwrap_(d.updateView())
 }
 
-func (d *download) doRecon(ctx context.Context) {
-	logger := video_archiver.Logger(ctx).Sugar().With("id", d.ID, "url", d.URL)
+func (d *download) doRecon(app Application) {
+	logger := app.Logger().Sugar().With("id", d.ID, "url", d.URL)
 	if d.cancel != nil {
 		logger.Warn("skipping doRecon(), task already in progress")
 		return
@@ -408,7 +408,8 @@ func (d *download) doRecon(ctx context.Context) {
 		return
 	}
 	logger.Debug("starting recon")
-	ctx, d.cancel = context.WithCancel(ctx)
+	var ctx context.Context
+	ctx, d.cancel = context.WithCancel(app.Context())
 	go func() {
 		defer func() { d.cancel = nil }()
 		if resolved, err := d.Match.Source.Recon(ctx); err != nil {
@@ -423,8 +424,8 @@ func (d *download) doRecon(ctx context.Context) {
 	}()
 }
 
-func (d *download) doDownload(ctx context.Context, builder video_archiver.DownloadBuilder) {
-	logger := video_archiver.Logger(ctx).Sugar().With("id", d.ID, "url", d.URL)
+func (d *download) doDownload(app Application, builder video_archiver.DownloadBuilder) {
+	logger := app.Logger().Sugar().With("id", d.ID, "url", d.URL)
 	if d.cancel != nil {
 		logger.Warn("skipping download, task already in progress")
 		return
@@ -433,9 +434,15 @@ func (d *download) doDownload(ctx context.Context, builder video_archiver.Downlo
 		return
 	}
 	logger.Debug("starting download")
-	ctx, d.cancel = context.WithCancel(ctx)
+	var ctx context.Context
+	ctx, d.cancel = context.WithCancel(app.Context())
 	builder = builder.WithContext(ctx).WithProgressCallback(func(downloaded int, expected int) {
-		d.progress = (downloaded * 100) / expected
+		if expected == 0 {
+			d.progress = 0
+		} else {
+			d.progress = (downloaded * 100) / expected
+		}
+		// TODO: rate-limit update frequency
 		glib.IdleAdd(func() { _ = d.updateView() })
 	})
 	d.State = database.DownloadStateDownloading

@@ -19,7 +19,7 @@ const (
 )
 
 type collectionManager struct {
-	app *application
+	app Application
 
 	collections map[database.RowID]*collection
 	current     *collection
@@ -37,14 +37,14 @@ type collectionManager struct {
 	OnCurrentChanged func(*collection)
 }
 
-func (m *collectionManager) onAppActivate(app *application) {
+func (m *collectionManager) onAppActivate(app Application) {
 	m.app = app
 	m.collections = make(map[database.RowID]*collection)
 
-	m.actionNew = m.app.registerSimpleWindowAction("new_collection", nil, m.onNewButtonClicked)
-	m.actionEdit = m.app.registerSimpleWindowAction("edit_collection", nil, m.onEditButtonClicked)
+	m.actionNew = m.app.RegisterSimpleWindowAction("new_collection", nil, m.onNewButtonClicked)
+	m.actionEdit = m.app.RegisterSimpleWindowAction("edit_collection", nil, m.onEditButtonClicked)
 	m.actionEdit.SetEnabled(false)
-	m.actionDelete = m.app.registerSimpleWindowAction("delete_collection", nil, m.onDeleteButtonClicked)
+	m.actionDelete = m.app.RegisterSimpleWindowAction("delete_collection", nil, m.onDeleteButtonClicked)
 	m.actionDelete.SetEnabled(false)
 
 	// Get additional GTK references
@@ -59,7 +59,7 @@ func (m *collectionManager) mustRefresh() {
 	m.collections = make(map[database.RowID]*collection)
 	m.unsetCurrent()
 	m.Store.Clear()
-	for _, dbCollection := range generic.Unwrap(m.app.database.GetAllCollections()) {
+	for _, dbCollection := range generic.Unwrap(m.app.DB().GetAllCollections()) {
 		c := &collection{Collection: dbCollection}
 		m.collections[c.ID] = c
 		generic.Unwrap_(c.addToStore(m.Store))
@@ -87,7 +87,7 @@ func (m *collectionManager) onNewButtonClicked() {
 		if c.Name == "" {
 			v.AddError("name", "Collection name must not be empty")
 		}
-		if generic.Unwrap(m.app.database.GetCollectionByName(c.Name)) != nil {
+		if generic.Unwrap(m.app.DB().GetCollectionByName(c.Name)) != nil {
 			v.AddError("name", "Collection name in use by another collection")
 		}
 		if c.Path == "" {
@@ -113,7 +113,7 @@ func (m *collectionManager) onEditButtonClicked() {
 		if c.Name == "" {
 			v.AddError("name", "Collection name must not be empty")
 		}
-		if other := generic.Unwrap(m.app.database.GetCollectionByName(c.Name)); other != nil && other.ID != c.ID {
+		if other := generic.Unwrap(m.app.DB().GetCollectionByName(c.Name)); other != nil && other.ID != c.ID {
 			v.AddError("name", "Collection name in use by another collection")
 		}
 		if c.Path == "" {
@@ -130,16 +130,16 @@ func (m *collectionManager) onEditButtonClicked() {
 }
 
 func (m *collectionManager) onDeleteButtonClicked() {
-	if !m.app.runWarningDialog("Are you sure you want to delete the collection \"%s\"?", m.current.Name) {
+	if !m.app.RunWarningDialog("Are you sure you want to delete the collection \"%s\"?", m.current.Name) {
 		return
 	}
-	generic.Unwrap_(m.app.database.DeleteCollection(m.current.ID))
+	generic.Unwrap_(m.app.DB().DeleteCollection(m.current.ID))
 	generic.Unwrap_(m.current.removeFromStore())
 	m.selection.UnselectAll()
 }
 
 func (m *collectionManager) create(dbCollection *database.Collection) {
-	generic.Unwrap_(m.app.database.InsertCollection(dbCollection))
+	generic.Unwrap_(m.app.DB().InsertCollection(dbCollection))
 	c := &collection{Collection: *dbCollection}
 	m.collections[c.ID] = c
 	generic.Unwrap_(c.addToStore(m.Store))
@@ -150,7 +150,7 @@ func (m *collectionManager) create(dbCollection *database.Collection) {
 }
 
 func (m *collectionManager) update(c *collection) {
-	generic.Unwrap_(m.app.database.UpdateCollection(&c.Collection))
+	generic.Unwrap_(m.app.DB().UpdateCollection(&c.Collection))
 	generic.Unwrap_(c.updateView())
 }
 
