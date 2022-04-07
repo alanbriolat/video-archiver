@@ -11,6 +11,7 @@ import (
 	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/generic"
 	"github.com/alanbriolat/video-archiver/gui"
+	_ "github.com/alanbriolat/video-archiver/providers"
 )
 
 func main() {

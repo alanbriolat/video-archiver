@@ -97,13 +97,12 @@ func (m *downloadManager) mustRefresh() {
 	// nothing should be selected...
 	m.selection.SetMode(gtk.SELECTION_NONE)
 	m.Store.Clear()
-	if m.collection == nil {
-		return
-	}
-	for _, dbDownload := range generic.Unwrap(m.app.database.GetDownloadsByCollectionID(m.collection.ID)) {
-		d := &download{Download: dbDownload}
-		m.downloads[d.ID] = d
-		generic.Unwrap_(d.addToStore(m.Store))
+	if m.collection != nil {
+		for _, dbDownload := range generic.Unwrap(m.app.database.GetDownloadsByCollectionID(m.collection.ID)) {
+			d := &download{Download: dbDownload}
+			m.downloads[d.ID] = d
+			generic.Unwrap_(d.addToStore(m.Store))
+		}
 	}
 	m.selection.SetMode(gtk.SELECTION_SINGLE)
 }
