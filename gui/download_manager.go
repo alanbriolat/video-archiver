@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"text/template"
 
 	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/glib"
@@ -202,9 +203,9 @@ func (m *downloadManager) onActionStart() {
 	if m.current.cancel != nil {
 		m.app.log.Info("doing nothing, task in progress")
 	}
-	if m.current.match == nil {
+	if m.current.Match == nil {
 		m.current.doMatch(m.app.providerRegistry)
-	} else if m.current.resolved == nil {
+	} else if m.current.Resolved == nil {
 		m.current.doRecon(m.app.ctx)
 	} else if m.current.State == database.DownloadStateNew {
 		m.current.doDownload(m.app.ctx, generic.Unwrap(m.createDownloadBuilder()))
@@ -290,10 +291,10 @@ func (m *downloadManager) createDownloadBuilder() (video_archiver.DownloadBuilde
 type download struct {
 	database.Download
 	progress int
-	match    *video_archiver.Match
-	resolved video_archiver.ResolvedSource
+	Match    *video_archiver.Match
+	Resolved video_archiver.ResolvedSource
 	cancel   context.CancelFunc
-	err      error
+	Err      error
 	treeRef  *gtk.TreeRowReference
 }
 
@@ -373,30 +374,27 @@ func (d *download) getDisplayProgress() int {
 }
 
 func (d *download) getDisplayName() string {
-	if d.resolved != nil {
-		return d.resolved.String()
-	} else if d.match != nil {
-		return d.match.Source.String()
+	if d.Resolved != nil {
+		return d.Resolved.String()
+	} else if d.Match != nil {
+		return d.Match.Source.String()
 	} else {
 		return d.URL
 	}
 }
 
 func (d *download) getDisplayTooltip() string {
-	// TODO: use a template string
-	if d.err != nil {
-		return fmt.Sprintf("%v\n\n%v", d.URL, d.err)
-	} else {
-		return d.URL
-	}
+	sb := &strings.Builder{}
+	generic.Unwrap_(downloadTooltipTemplate.Execute(sb, d))
+	return sb.String()
 }
 
 func (d *download) doMatch(r *video_archiver.ProviderRegistry) {
-	if d.match, d.err = r.Match(d.URL); d.err != nil {
-		d.err = fmt.Errorf("no match: %w", d.err)
+	if d.Match, d.Err = r.Match(d.URL); d.Err != nil {
+		d.Err = fmt.Errorf("no match: %w", d.Err)
 		d.State = database.DownloadStateError
 	}
-	log.Printf("match=%v err=%v", d.match, d.err)
+	log.Printf("match=%v err=%v", d.Match, d.Err)
 	generic.Unwrap_(d.updateView())
 }
 
@@ -405,7 +403,7 @@ func (d *download) doRecon(ctx context.Context) {
 	if d.cancel != nil {
 		logger.Warn("skipping doRecon(), task already in progress")
 		return
-	} else if d.match == nil {
+	} else if d.Match == nil {
 		logger.Warn("skipping doRecon(), no provider match")
 		return
 	}
@@ -413,13 +411,13 @@ func (d *download) doRecon(ctx context.Context) {
 	ctx, d.cancel = context.WithCancel(ctx)
 	go func() {
 		defer func() { d.cancel = nil }()
-		if resolved, err := d.match.Source.Recon(ctx); err != nil {
+		if resolved, err := d.Match.Source.Recon(ctx); err != nil {
 			logger.Errorf("failed to recon download: %v", err)
-			d.err = err
+			d.Err = err
 			d.State = database.DownloadStateError
 		} else {
 			logger.Debug("recon complete")
-			d.resolved = resolved
+			d.Resolved = resolved
 		}
 		glib.IdleAdd(func() { _ = d.updateView() })
 	}()
@@ -430,7 +428,7 @@ func (d *download) doDownload(ctx context.Context, builder video_archiver.Downlo
 	if d.cancel != nil {
 		logger.Warn("skipping download, task already in progress")
 		return
-	} else if d.resolved == nil {
+	} else if d.Resolved == nil {
 		logger.Warn("skipping download, recon not complete")
 		return
 	}
@@ -445,11 +443,11 @@ func (d *download) doDownload(ctx context.Context, builder video_archiver.Downlo
 		defer func() { d.cancel = nil }()
 		if download, err := builder.Build(); err != nil {
 			logger.Errorf("failed to create download: %v", err)
-			d.err = err
+			d.Err = err
 			d.State = database.DownloadStateError
-		} else if err := d.resolved.Download(download); err != nil {
+		} else if err := d.Resolved.Download(download); err != nil {
 			logger.Errorf("failed to download: %v", err)
-			d.err = err
+			d.Err = err
 			d.State = database.DownloadStateError
 		} else {
 			logger.Debug("download complete")
@@ -462,3 +460,10 @@ func (d *download) doDownload(ctx context.Context, builder video_archiver.Downlo
 func (d *download) String() string {
 	return fmt.Sprintf("download{ID: %v, URL: %v}", d.ID, d.URL)
 }
+
+var downloadTooltipTemplate = template.Must(
+	template.New("tooltip").Funcs(template.FuncMap{"trim": strings.TrimSpace}).Parse(strings.TrimSpace(`
+{{if .Match}}[{{ .Match.ProviderName }}] {{end}}{{ .URL }}{{if .Err}}
+
+{{ trim .Err.Error }}{{end}}
+`)))
