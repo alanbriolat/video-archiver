@@ -114,4 +114,7 @@ func (a *application) onActivate() {
 
 func (a *application) onShutdown() {
 	a.Logger().Info("application shutdown")
+
+	a.Downloads.onAppShutdown()
+	a.Collections.onAppShutdown()
 }

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"text/template"
 
 	"github.com/gotk3/gotk3/gdk"
@@ -42,9 +43,10 @@ func (g actionGroup) setEnabled(enabled bool) {
 type downloadManager struct {
 	app Application
 
-	collection *collection
-	downloads  map[database.RowID]*download
-	current    *download
+	collection  *collection
+	items       map[database.RowID]*download
+	itemUpdated chan *download
+	current     *download
 
 	actionNew         *glib.SimpleAction
 	actionPaste       *glib.SimpleAction
@@ -68,7 +70,21 @@ type downloadManager struct {
 
 func (m *downloadManager) onAppActivate(app Application, c *collectionManager) {
 	m.app = app
-	m.downloads = make(map[database.RowID]*download)
+	m.items = make(map[database.RowID]*download)
+	m.itemUpdated = make(chan *download)
+
+	go func() {
+		logger := m.app.Logger().Sugar()
+		for item := range m.itemUpdated {
+			logger.Debugf("item updated: %v", item)
+			generic.Unwrap_(m.app.DB().UpdateDownload(&item.Download))
+			treeRef := item.getTreeRef()
+			columns, values := item.getDisplay()
+			// Modifying the store must be done in the GTK main thread
+			glib.IdleAdd(func() { m.mustUpdateItem(treeRef, columns, values) })
+		}
+		logger.Debug("stopping itemUpdated goroutine")
+	}()
 
 	m.actionNew = m.app.RegisterSimpleWindowAction("new_download", nil, m.onActionNew)
 	m.actionPaste = m.app.RegisterSimpleWindowAction("paste_download", nil, m.onActionPaste)
@@ -96,21 +112,51 @@ func (m *downloadManager) onAppActivate(app Application, c *collectionManager) {
 	m.PaneDetails.SetVisible(false)
 }
 
+func (m *downloadManager) onAppShutdown() {
+	close(m.itemUpdated)
+}
+
+func (m *downloadManager) selectionDisabled(f func()) {
+	mode := m.selection.GetMode()
+	m.selection.SetMode(gtk.SELECTION_NONE)
+	defer m.selection.SetMode(mode)
+	f()
+}
+
+func (m *downloadManager) mustCreateTreeRef() *gtk.TreeRowReference {
+	treePath := generic.Unwrap(m.Store.GetPath(m.Store.Append()))
+	treeRef := generic.Unwrap(gtk.TreeRowReferenceNew(m.Store.ToTreeModel(), treePath))
+	return treeRef
+}
+
+func (m *downloadManager) mustRemoveItem(treeRef *gtk.TreeRowReference) {
+	iter := generic.Unwrap(m.Store.GetIter(treeRef.GetPath()))
+	m.selection.UnselectIter(iter)
+	m.selectionDisabled(func() {
+		m.Store.Remove(iter)
+	})
+}
+
+func (m *downloadManager) mustUpdateItem(treeRef *gtk.TreeRowReference, columns []int, values []interface{}) {
+	iter := generic.Unwrap(m.Store.GetIter(treeRef.GetPath()))
+	generic.Unwrap_(m.Store.Set(iter, columns, values))
+}
+
 func (m *downloadManager) mustRefresh() {
-	m.downloads = make(map[database.RowID]*download)
+	m.items = make(map[database.RowID]*download)
 	m.selection.UnselectAll()
 	// Disable selection while we refresh the store, otherwise we get a load of spurious "changed" signals even though
 	// nothing should be selected...
-	m.selection.SetMode(gtk.SELECTION_NONE)
-	m.Store.Clear()
-	if m.collection != nil {
-		for _, dbDownload := range generic.Unwrap(m.app.DB().GetDownloadsByCollectionID(m.collection.ID)) {
-			d := &download{Download: dbDownload}
-			m.downloads[d.ID] = d
-			generic.Unwrap_(d.addToStore(m.Store))
+	m.selectionDisabled(func() {
+		m.Store.Clear()
+		if m.collection != nil {
+			for _, dbDownload := range generic.Unwrap(m.app.DB().GetDownloadsByCollectionID(m.collection.ID)) {
+				d := newDownloadFromDB(dbDownload, m.itemUpdated, m.mustCreateTreeRef())
+				m.items[d.ID] = d
+				d.onUpdate()
+			}
 		}
-	}
-	m.selection.SetMode(gtk.SELECTION_SINGLE)
+	})
 }
 
 func (m *downloadManager) onViewSelectionChanged(selection *gtk.TreeSelection) {
@@ -170,7 +216,7 @@ func (m *downloadManager) onActionEdit() {
 		}
 		if v.IsOk() {
 			m.current.Download = d
-			m.update(m.current)
+			m.current.onUpdate()
 			break
 		} else {
 			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
@@ -194,7 +240,7 @@ func (m *downloadManager) onActionDelete() {
 		return
 	}
 	generic.Unwrap_(m.app.DB().DeleteDownload(m.current.ID))
-	generic.Unwrap_(m.current.removeFromStore())
+	m.mustRemoveItem(m.current.getTreeRef())
 	m.selection.UnselectAll()
 }
 
@@ -232,14 +278,9 @@ func (m *downloadManager) addDownloadURL(text string) error {
 
 func (m *downloadManager) create(dbDownload *database.Download) {
 	generic.Unwrap_(m.app.DB().InsertDownload(dbDownload))
-	d := &download{Download: *dbDownload}
-	m.downloads[d.ID] = d
-	generic.Unwrap_(d.addToStore(m.Store))
-}
-
-func (m *downloadManager) update(d *download) {
-	generic.Unwrap_(m.app.DB().UpdateDownload(&d.Download))
-	generic.Unwrap_(d.updateView())
+	d := newDownloadFromDB(*dbDownload, m.itemUpdated, m.mustCreateTreeRef())
+	m.items[d.ID] = d
+	d.onUpdate()
 }
 
 func (m *downloadManager) setCollection(c *collection) {
@@ -257,7 +298,7 @@ func (m *downloadManager) setCurrent(id database.RowID) {
 	if m.current != nil && m.current.ID == id {
 		return
 	}
-	m.current = m.downloads[id]
+	m.current = m.items[id]
 	m.downloadActions.setEnabled(true)
 	if m.OnCurrentChanged != nil {
 		m.OnCurrentChanged(m.current)
@@ -290,79 +331,55 @@ func (m *downloadManager) createDownloadBuilder() (video_archiver.DownloadBuilde
 
 type download struct {
 	database.Download
+	updated  chan<- *download
+	treeRef  *gtk.TreeRowReference
+	mu       sync.Mutex
 	progress int
 	Match    *video_archiver.Match
 	Resolved video_archiver.ResolvedSource
 	cancel   context.CancelFunc
 	Err      error
-	treeRef  *gtk.TreeRowReference
 }
 
-// TODO: remove duplication
-func (d *download) addToStore(store *gtk.ListStore) error {
-	if d.treeRef != nil {
-		return fmt.Errorf("download already in store")
-	} else if treePath, err := store.GetPath(store.Append()); err != nil {
-		return err
-	} else if treeRef, err := gtk.TreeRowReferenceNew(store.ToTreeModel(), treePath); err != nil {
-		return err
-	} else {
-		d.treeRef = treeRef
-		return d.updateView()
+func newDownloadFromDB(dbDownload database.Download, updated chan<- *download, treeRef *gtk.TreeRowReference) *download {
+	return &download{
+		Download: dbDownload,
+		updated:  updated,
+		treeRef:  treeRef,
 	}
 }
 
-// TODO: remove duplication
-func (d *download) removeFromStore() error {
-	if d.treeRef == nil {
-		return fmt.Errorf("collection not in store")
-	} else if model, err := d.treeRef.GetModel(); err != nil {
-		return fmt.Errorf("failed to get view model: %w", err)
-	} else if iter, err := model.ToTreeModel().GetIter(d.treeRef.GetPath()); err != nil {
-		return fmt.Errorf("failed to get store iter: %w", err)
-	} else {
-		model.(*gtk.ListStore).Remove(iter)
-		return nil
-	}
+func (d *download) onUpdate() {
+	d.updated <- d
 }
 
-// TODO: remove duplication
-func (d *download) updateView() error {
-	if d.treeRef == nil {
-		return fmt.Errorf("download not in view")
-	} else if model, err := d.treeRef.GetModel(); err != nil {
-		return fmt.Errorf("failed to get view model: %w", err)
-	} else if iter, err := model.ToTreeModel().GetIter(d.treeRef.GetPath()); err != nil {
-		return fmt.Errorf("failed to get store iter: %w", err)
-	} else {
-		err := model.(*gtk.ListStore).Set(
-			iter,
-			[]int{
-				DOWNLOAD_COLUMN_ID,
-				DOWNLOAD_COLUMN_URL,
-				DOWNLOAD_COLUMN_ADDED,
-				DOWNLOAD_COLUMN_STATE,
-				DOWNLOAD_COLUMN_PROGRESS,
-				DOWNLOAD_COLUMN_NAME,
-				DOWNLOAD_COLUMN_TOOLTIP,
-			},
-			[]interface{}{
-				d.ID,
-				d.URL,
-				// TODO: get in current timezone
-				d.Added.Format("2006-01-02 15:04:05"),
-				d.State.String(),
-				d.getDisplayProgress(),
-				d.getDisplayName(),
-				d.getDisplayTooltip(),
-			},
-		)
-		if err != nil {
-			return fmt.Errorf("failed to update store: %w", err)
-		} else {
-			return nil
-		}
+func (d *download) getTreeRef() *gtk.TreeRowReference {
+	return d.treeRef
+}
+
+func (d *download) getDisplay() (columns []int, values []interface{}) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	columns = []int{
+		DOWNLOAD_COLUMN_ID,
+		DOWNLOAD_COLUMN_URL,
+		DOWNLOAD_COLUMN_ADDED,
+		DOWNLOAD_COLUMN_STATE,
+		DOWNLOAD_COLUMN_PROGRESS,
+		DOWNLOAD_COLUMN_NAME,
+		DOWNLOAD_COLUMN_TOOLTIP,
 	}
+	values = []interface{}{
+		d.ID,
+		d.URL,
+		// TODO: get in current timezone
+		d.Added.Format("2006-01-02 15:04:05"),
+		d.State.String(),
+		d.getDisplayProgress(),
+		d.getDisplayName(),
+		d.getDisplayTooltip(),
+	}
+	return columns, values
 }
 
 func (d *download) getDisplayProgress() int {
@@ -395,7 +412,7 @@ func (d *download) doMatch(app Application) {
 		d.State = database.DownloadStateError
 	}
 	log.Printf("match=%v err=%v", d.Match, d.Err)
-	generic.Unwrap_(d.updateView())
+	d.onUpdate()
 }
 
 func (d *download) doRecon(app Application) {
@@ -420,7 +437,7 @@ func (d *download) doRecon(app Application) {
 			logger.Debug("recon complete")
 			d.Resolved = resolved
 		}
-		glib.IdleAdd(func() { _ = d.updateView() })
+		d.onUpdate()
 	}()
 }
 
@@ -443,7 +460,7 @@ func (d *download) doDownload(app Application, builder video_archiver.DownloadBu
 			d.progress = (downloaded * 100) / expected
 		}
 		// TODO: rate-limit update frequency
-		glib.IdleAdd(func() { _ = d.updateView() })
+		d.onUpdate()
 	})
 	d.State = database.DownloadStateDownloading
 	go func() {
@@ -460,7 +477,7 @@ func (d *download) doDownload(app Application, builder video_archiver.DownloadBu
 			logger.Debug("download complete")
 			d.State = database.DownloadStateComplete
 		}
-		glib.IdleAdd(func() { _ = d.updateView() })
+		d.onUpdate()
 	}()
 }
 
