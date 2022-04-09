@@ -109,7 +109,7 @@ func (a *application) onActivate() {
 	}
 
 	a.Window.Show()
-	a.Collections.mustRefresh()
+	a.Collections.MustRefresh()
 }
 
 func (a *application) onShutdown() {

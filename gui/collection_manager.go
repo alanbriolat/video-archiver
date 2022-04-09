@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/gotk3/gotk3/glib"
-	"github.com/gotk3/gotk3/gtk"
 
 	"github.com/alanbriolat/video-archiver/database"
 	"github.com/alanbriolat/video-archiver/generic"
@@ -20,19 +19,13 @@ const (
 )
 
 type collectionManager struct {
-	app Application
+	ListView[*collection]
 
-	items       map[database.RowID]*collection
-	itemUpdated chan *collection
-	current     *collection
+	app Application
 
 	actionNew    *glib.SimpleAction
 	actionEdit   *glib.SimpleAction
 	actionDelete *glib.SimpleAction
-
-	Store     *gtk.ListStore `glade:"store"`
-	View      *gtk.TreeView  `glade:"tree"`
-	selection *gtk.TreeSelection
 
 	dlgEdit *collectionEditDialog
 
@@ -41,21 +34,26 @@ type collectionManager struct {
 
 func (m *collectionManager) onAppActivate(app Application) {
 	m.app = app
-	m.items = make(map[database.RowID]*collection)
-	m.itemUpdated = make(chan *collection)
-
-	go func() {
-		logger := m.app.Logger().Sugar()
-		for item := range m.itemUpdated {
-			logger.Debugf("item updated: %v", item)
-			generic.Unwrap_(m.app.DB().UpdateCollection(&item.Collection))
-			treeRef := item.getTreeRef()
-			columns, values := item.getDisplay()
-			// Modifying the store must be done in the GTK main thread
-			glib.IdleAdd(func() { m.mustUpdateItem(treeRef, columns, values) })
+	m.ListView.idColumn = COLLECTION_COLUMN_ID
+	m.ListView.onCurrentChanged = func(c *collection) {
+		enabled := c != nil
+		m.actionEdit.SetEnabled(enabled)
+		m.actionDelete.SetEnabled(enabled)
+		if m.onCurrentChanged != nil {
+			m.OnCurrentChanged(c)
 		}
-		logger.Debug("stopping itemUpdated goroutine")
-	}()
+	}
+	m.ListView.onItemUpdated = func(c *collection) {
+		generic.Unwrap_(m.app.DB().UpdateCollection(&c.Collection))
+	}
+	m.ListView.onRefresh = func() []*collection {
+		var items []*collection
+		for _, dbCollection := range generic.Unwrap(m.app.DB().GetAllCollections()) {
+			items = append(items, newCollectionFromDB(dbCollection))
+		}
+		return items
+	}
+	m.InitListView()
 
 	m.actionNew = m.app.RegisterSimpleWindowAction("new_collection", nil, m.onNewButtonClicked)
 	m.actionEdit = m.app.RegisterSimpleWindowAction("edit_collection", nil, m.onEditButtonClicked)
@@ -66,64 +64,10 @@ func (m *collectionManager) onAppActivate(app Application) {
 	// Get additional GTK references
 	m.selection = generic.Unwrap(m.View.GetSelection())
 	m.dlgEdit = newCollectionEditDialog()
-
-	m.selection.SetMode(gtk.SELECTION_SINGLE)
-	m.selection.Connect("changed", m.onViewSelectionChanged)
 }
 
 func (m *collectionManager) onAppShutdown() {
 	close(m.itemUpdated)
-}
-
-func (m *collectionManager) selectionDisabled(f func()) {
-	mode := m.selection.GetMode()
-	m.selection.SetMode(gtk.SELECTION_NONE)
-	defer m.selection.SetMode(mode)
-	f()
-}
-
-func (m *collectionManager) mustCreateTreeRef() *gtk.TreeRowReference {
-	treePath := generic.Unwrap(m.Store.GetPath(m.Store.Append()))
-	treeRef := generic.Unwrap(gtk.TreeRowReferenceNew(m.Store.ToTreeModel(), treePath))
-	return treeRef
-}
-
-func (m *collectionManager) mustRemoveItem(treeRef *gtk.TreeRowReference) {
-	iter := generic.Unwrap(m.Store.GetIter(treeRef.GetPath()))
-	m.selection.UnselectIter(iter)
-	m.selectionDisabled(func() {
-		m.Store.Remove(iter)
-	})
-}
-
-func (m *collectionManager) mustUpdateItem(treeRef *gtk.TreeRowReference, columns []int, values []interface{}) {
-	iter := generic.Unwrap(m.Store.GetIter(treeRef.GetPath()))
-	generic.Unwrap_(m.Store.Set(iter, columns, values))
-}
-
-func (m *collectionManager) mustRefresh() {
-	m.items = make(map[database.RowID]*collection)
-	m.selection.UnselectAll()
-	// Disable selection while we refresh the store, otherwise we get a load of spurious "changed" signals even though
-	// nothing should be selected...
-	m.selectionDisabled(func() {
-		m.Store.Clear()
-		for _, dbCollection := range generic.Unwrap(m.app.DB().GetAllCollections()) {
-			c := newCollectionFromDB(dbCollection, m.itemUpdated, m.mustCreateTreeRef())
-			m.items[c.ID] = c
-			c.onUpdate()
-		}
-	})
-}
-
-func (m *collectionManager) onViewSelectionChanged(selection *gtk.TreeSelection) {
-	model, iter, ok := selection.GetSelected()
-	if ok {
-		id := generic.Unwrap(generic.Unwrap(model.ToTreeModel().GetValue(iter, COLLECTION_COLUMN_ID)).GoValue()).(int64)
-		m.setCurrent(id)
-	} else {
-		m.unsetCurrent()
-	}
 }
 
 func (m *collectionManager) onNewButtonClicked() {
@@ -184,65 +128,40 @@ func (m *collectionManager) onDeleteButtonClicked() {
 		return
 	}
 	generic.Unwrap_(m.app.DB().DeleteCollection(m.current.ID))
-	m.mustRemoveItem(m.current.getTreeRef())
-	m.selection.UnselectAll()
+	m.MustRemoveItem(m.current)
 }
 
 func (m *collectionManager) create(dbCollection *database.Collection) {
 	generic.Unwrap_(m.app.DB().InsertCollection(dbCollection))
-	c := newCollectionFromDB(*dbCollection, m.itemUpdated, m.mustCreateTreeRef())
-	m.items[c.ID] = c
-	c.onUpdate()
-}
-
-func (m *collectionManager) setCurrent(id database.RowID) {
-	if m.current != nil && m.current.ID == id {
-		return
-	}
-	m.current = m.items[id]
-	m.actionEdit.SetEnabled(true)
-	m.actionDelete.SetEnabled(true)
-	if m.OnCurrentChanged != nil {
-		m.OnCurrentChanged(m.current)
-	}
-}
-
-func (m *collectionManager) unsetCurrent() {
-	if m.current == nil {
-		return
-	}
-	m.current = nil
-	m.actionEdit.SetEnabled(false)
-	m.actionDelete.SetEnabled(false)
-	if m.OnCurrentChanged != nil {
-		m.OnCurrentChanged(m.current)
-	}
+	c := newCollectionFromDB(*dbCollection)
+	m.MustAddItem(c)
 }
 
 type collection struct {
 	database.Collection
 	updated chan<- *collection
-	treeRef *gtk.TreeRowReference
 	mu      sync.Mutex
 }
 
-func newCollectionFromDB(dbCollection database.Collection, updated chan<- *collection, treeRef *gtk.TreeRowReference) *collection {
-	return &collection{
-		Collection: dbCollection,
-		updated:    updated,
-		treeRef:    treeRef,
-	}
+func newCollectionFromDB(dbCollection database.Collection) *collection {
+	return &collection{Collection: dbCollection}
 }
 
 func (c *collection) onUpdate() {
-	c.updated <- c
+	if c.updated != nil {
+		c.updated <- c
+	}
 }
 
-func (c *collection) getTreeRef() *gtk.TreeRowReference {
-	return c.treeRef
+func (c *collection) Bind(itemUpdated chan<- *collection) {
+	c.updated = itemUpdated
 }
 
-func (c *collection) getDisplay() (columns []int, values []interface{}) {
+func (c *collection) GetID() database.RowID {
+	return c.ID
+}
+
+func (c *collection) GetDisplay() (columns []int, values []interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	columns = []int{
