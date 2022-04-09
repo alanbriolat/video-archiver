@@ -190,6 +190,7 @@ func (s *DownloadState) String() string {
 
 const (
 	DownloadStateNew         DownloadState = "new"
+	DownloadStateReady       DownloadState = "ready"
 	DownloadStateDownloading DownloadState = "downloading"
 	DownloadStateComplete    DownloadState = "complete"
 	DownloadStateError       DownloadState = "error"
@@ -201,4 +202,7 @@ type Download struct {
 	URL          string
 	Added        time.Time     `gorm:"default:(-);->"`
 	State        DownloadState `gorm:"default:(-)"`
+	Error        string        `gorm:"default:''"`
+	Provider     string        `gorm:"default:''"`
+	Name         string        `gorm:"default:''"`
 }

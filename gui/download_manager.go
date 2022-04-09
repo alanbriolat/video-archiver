@@ -3,7 +3,6 @@ package gui
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -12,6 +11,7 @@ import (
 	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	"go.uber.org/zap"
 
 	"github.com/alanbriolat/video-archiver"
 	"github.com/alanbriolat/video-archiver/database"
@@ -199,13 +199,14 @@ func (m *downloadManager) onActionStart() {
 		m.current.doMatch(m.app)
 	} else if m.current.Resolved == nil {
 		m.current.doRecon(m.app)
-	} else if m.current.State == database.DownloadStateNew {
+	} else if m.current.State == database.DownloadStateReady {
 		m.current.doDownload(m.app, generic.Unwrap(m.createDownloadBuilder()))
 	}
 }
 
 func (m *downloadManager) onActionStop() {
-
+	m.app.Logger().Info("onActionStop")
+	m.current.stop()
 }
 
 func (m *downloadManager) addDownloadURL(text string) error {
@@ -260,7 +261,6 @@ type download struct {
 	Match    *video_archiver.Match
 	Resolved video_archiver.ResolvedSource
 	cancel   context.CancelFunc
-	Err      error
 }
 
 func newDownloadFromDB(dbDownload database.Download) *download {
@@ -273,6 +273,23 @@ func (d *download) onUpdate() {
 	}
 }
 
+func (d *download) locked(f func()) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	f()
+}
+
+func (d *download) updating(f func()) {
+	d.locked(f)
+	d.onUpdate()
+}
+
+func (d *download) stop() {
+	if d.cancel != nil {
+		d.cancel()
+	}
+}
+
 func (d *download) Bind(itemUpdated chan<- *download) {
 	d.updated = itemUpdated
 }
@@ -282,27 +299,27 @@ func (d *download) GetID() database.RowID {
 }
 
 func (d *download) GetDisplay() (columns []int, values []interface{}) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	columns = []int{
-		DOWNLOAD_COLUMN_ID,
-		DOWNLOAD_COLUMN_URL,
-		DOWNLOAD_COLUMN_ADDED,
-		DOWNLOAD_COLUMN_STATE,
-		DOWNLOAD_COLUMN_PROGRESS,
-		DOWNLOAD_COLUMN_NAME,
-		DOWNLOAD_COLUMN_TOOLTIP,
-	}
-	values = []interface{}{
-		d.ID,
-		d.URL,
-		// TODO: get in current timezone
-		d.Added.Format("2006-01-02 15:04:05"),
-		d.State.String(),
-		d.getDisplayProgress(),
-		d.getDisplayName(),
-		d.getDisplayTooltip(),
-	}
+	d.locked(func() {
+		columns = []int{
+			DOWNLOAD_COLUMN_ID,
+			DOWNLOAD_COLUMN_URL,
+			DOWNLOAD_COLUMN_ADDED,
+			DOWNLOAD_COLUMN_STATE,
+			DOWNLOAD_COLUMN_PROGRESS,
+			DOWNLOAD_COLUMN_NAME,
+			DOWNLOAD_COLUMN_TOOLTIP,
+		}
+		values = []interface{}{
+			d.ID,
+			d.URL,
+			// TODO: get in current timezone
+			d.Added.Format("2006-01-02 15:04:05"),
+			d.State.String(),
+			d.getDisplayProgress(),
+			d.getDisplayName(),
+			d.getDisplayTooltip(),
+		}
+	})
 	return columns, values
 }
 
@@ -315,10 +332,8 @@ func (d *download) getDisplayProgress() int {
 }
 
 func (d *download) getDisplayName() string {
-	if d.Resolved != nil {
-		return d.Resolved.String()
-	} else if d.Match != nil {
-		return d.Match.Source.String()
+	if d.Name != "" {
+		return d.Name
 	} else {
 		return d.URL
 	}
@@ -331,16 +346,45 @@ func (d *download) getDisplayTooltip() string {
 }
 
 func (d *download) doMatch(app Application) {
-	if d.Match, d.Err = app.ProviderRegistry().Match(d.URL); d.Err != nil {
-		d.Err = fmt.Errorf("no match: %w", d.Err)
-		d.State = database.DownloadStateError
+	logger := d.getLogger(app)
+	/// Do nothing if we've already been matched
+	if d.Match != nil {
+		logger.Debug("skipping match, already matched")
+		return
 	}
-	log.Printf("match=%v err=%v", d.Match, d.Err)
-	d.onUpdate()
+	var match *video_archiver.Match
+	var err error
+	if d.Provider != "" {
+		// If we matched with a specific provider previously, use specifically that provider this time
+		logger.Debugf("matching using provider '%v'", d.Provider)
+		match, err = app.ProviderRegistry().MatchWith(d.Provider, d.URL)
+	} else {
+		// ... otherwise match against any provider
+		logger.Debug("matching with any provider")
+		match, err = app.ProviderRegistry().Match(d.URL)
+	}
+	// Update download state
+	d.updating(func() {
+		if err == nil {
+			logger.Debugf("successfully matched with provider '%v'", match.ProviderName)
+			d.Provider = match.ProviderName
+			d.Match = match
+			d.State = database.DownloadStateNew
+			d.Error = ""
+			d.Name = match.Source.String()
+		} else {
+			logger.Errorf("failed to match: %v", err)
+			d.Provider = ""
+			d.Match = nil
+			d.State = database.DownloadStateError
+			d.Error = err.Error()
+			d.Name = ""
+		}
+	})
 }
 
 func (d *download) doRecon(app Application) {
-	logger := app.Logger().Sugar().With("id", d.ID, "url", d.URL)
+	logger := d.getLogger(app)
 	if d.cancel != nil {
 		logger.Warn("skipping doRecon(), task already in progress")
 		return
@@ -353,20 +397,27 @@ func (d *download) doRecon(app Application) {
 	ctx, d.cancel = context.WithCancel(app.Context())
 	go func() {
 		defer func() { d.cancel = nil }()
-		if resolved, err := d.Match.Source.Recon(ctx); err != nil {
-			logger.Errorf("failed to recon download: %v", err)
-			d.Err = err
-			d.State = database.DownloadStateError
-		} else {
-			logger.Debug("recon complete")
-			d.Resolved = resolved
-		}
-		d.onUpdate()
+		resolved, err := d.Match.Source.Recon(ctx)
+		d.updating(func() {
+			if err == nil {
+				logger.Debug("recon complete")
+				d.Resolved = resolved
+				d.State = database.DownloadStateReady
+				d.Error = ""
+				d.Name = d.Resolved.String()
+			} else {
+				logger.Errorf("failed to recon download: %v", err)
+				d.Resolved = nil
+				d.State = database.DownloadStateError
+				d.Error = err.Error()
+				d.Name = ""
+			}
+		})
 	}()
 }
 
 func (d *download) doDownload(app Application, builder video_archiver.DownloadBuilder) {
-	logger := app.Logger().Sugar().With("id", d.ID, "url", d.URL)
+	logger := d.getLogger(app)
 	if d.cancel != nil {
 		logger.Warn("skipping download, task already in progress")
 		return
@@ -378,30 +429,46 @@ func (d *download) doDownload(app Application, builder video_archiver.DownloadBu
 	var ctx context.Context
 	ctx, d.cancel = context.WithCancel(app.Context())
 	builder = builder.WithContext(ctx).WithProgressCallback(func(downloaded int, expected int) {
+		var progress int
 		if expected == 0 {
-			d.progress = 0
+			progress = 0
 		} else {
-			d.progress = (downloaded * 100) / expected
+			progress = (downloaded * 100) / expected
 		}
-		// TODO: rate-limit update frequency
-		d.onUpdate()
+		if progress != d.progress {
+			// TODO: rate-limit update frequency
+			d.updating(func() {
+				d.progress = progress
+			})
+		}
 	})
-	d.State = database.DownloadStateDownloading
+	d.updating(func() {
+		d.State = database.DownloadStateDownloading
+	})
 	go func() {
 		defer func() { d.cancel = nil }()
-		if download, err := builder.Build(); err != nil {
+		download, err := builder.Build()
+		if err != nil {
 			logger.Errorf("failed to create download: %v", err)
-			d.Err = err
-			d.State = database.DownloadStateError
-		} else if err := d.Resolved.Download(download); err != nil {
-			logger.Errorf("failed to download: %v", err)
-			d.Err = err
-			d.State = database.DownloadStateError
-		} else {
-			logger.Debug("download complete")
-			d.State = database.DownloadStateComplete
+			d.updating(func() {
+				d.State = database.DownloadStateError
+				d.Error = err.Error()
+			})
+			return
 		}
-		d.onUpdate()
+		err = d.Resolved.Download(download)
+		if err != nil {
+			logger.Errorf("failed to download: %v", err)
+			d.updating(func() {
+				d.State = database.DownloadStateError
+				d.Error = err.Error()
+			})
+			return
+		}
+		logger.Debug("download complete")
+		d.updating(func() {
+			d.State = database.DownloadStateComplete
+		})
 	}()
 }
 
@@ -409,9 +476,13 @@ func (d *download) String() string {
 	return fmt.Sprintf("download{ID: %v, URL: %v}", d.ID, d.URL)
 }
 
+func (d *download) getLogger(app Application) *zap.SugaredLogger {
+	return app.Logger().Named("download").With(zap.Int("id", int(d.ID)), zap.String("url", d.URL)).Sugar()
+}
+
 var downloadTooltipTemplate = template.Must(
 	template.New("tooltip").Funcs(template.FuncMap{"trim": strings.TrimSpace}).Parse(strings.TrimSpace(`
-{{if .Match}}[{{ .Match.ProviderName }}] {{end}}{{ .URL }}{{if .Err}}
+{{if .Provider}}[{{ .Provider }}] {{end}}{{ .URL }}{{if .Error}}
 
-{{ trim .Err.Error }}{{end}}
+{{ trim .Error }}{{end}}
 `)))
