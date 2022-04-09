@@ -24,9 +24,9 @@ func newDownloadEditDialog(collectionStore *gtk.ListStore) *downloadEditDialog {
 
 	GladeRepository.MustBuild(d, "download_edit_dialog.glade")
 	d.Collection.SetModel(d.collectionStore.ToTreeModel())
-	d.Collection.SetIDColumn(COLLECTION_COLUMN_ID_STR)
-	d.Collection.SetEntryTextColumn(COLLECTION_COLUMN_NAME)
-	d.Collection.AddAttribute(d.CollectionName, "text", COLLECTION_COLUMN_NAME)
+	d.Collection.SetIDColumn(collectionColumnIDStr)
+	d.Collection.SetEntryTextColumn(collectionColumnName)
+	d.Collection.AddAttribute(d.CollectionName, "text", collectionColumnName)
 	// Whenever either input is edited, update the "sensitive" state of the OK button
 	d.Collection.Connect("changed", d.updateOkButton)
 	d.URL.Connect("changed", d.updateOkButton)
@@ -75,7 +75,7 @@ func (d *downloadEditDialog) getCollectionID() database.RowID {
 	if iter, err := d.Collection.GetActiveIter(); err != nil {
 		return database.NullRowID
 	} else {
-		return generic.Unwrap(generic.Unwrap(d.collectionStore.ToTreeModel().GetValue(iter, COLLECTION_COLUMN_ID)).GoValue()).(int64)
+		return generic.Unwrap(generic.Unwrap(d.collectionStore.ToTreeModel().GetValue(iter, collectionColumnID)).GoValue()).(int64)
 	}
 }
 

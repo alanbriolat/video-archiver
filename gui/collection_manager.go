@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	COLLECTION_COLUMN_ID = iota
-	COLLECTION_COLUMN_NAME
-	COLLECTION_COLUMN_PATH
-	COLLECTION_COLUMN_ID_STR
+	collectionColumnID = iota
+	collectionColumnName
+	collectionColumnPath
+	collectionColumnIDStr
 )
 
 type collectionManager struct {
@@ -34,7 +34,7 @@ type collectionManager struct {
 
 func (m *collectionManager) onAppActivate(app Application) {
 	m.app = app
-	m.ListView.idColumn = COLLECTION_COLUMN_ID
+	m.ListView.idColumn = collectionColumnID
 	m.ListView.onCurrentChanged = func(c *collection) {
 		enabled := c != nil
 		m.actionEdit.SetEnabled(enabled)
@@ -165,10 +165,10 @@ func (c *collection) GetDisplay() (columns []int, values []interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	columns = []int{
-		COLLECTION_COLUMN_ID,
-		COLLECTION_COLUMN_NAME,
-		COLLECTION_COLUMN_PATH,
-		COLLECTION_COLUMN_ID_STR,
+		collectionColumnID,
+		collectionColumnName,
+		collectionColumnPath,
+		collectionColumnIDStr,
 	}
 	values = []interface{}{
 		c.ID,

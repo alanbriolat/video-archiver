@@ -19,13 +19,13 @@ import (
 )
 
 const (
-	DOWNLOAD_COLUMN_ID = iota
-	DOWNLOAD_COLUMN_URL
-	DOWNLOAD_COLUMN_ADDED
-	DOWNLOAD_COLUMN_STATE
-	DOWNLOAD_COLUMN_PROGRESS
-	DOWNLOAD_COLUMN_NAME
-	DOWNLOAD_COLUMN_TOOLTIP
+	downloadColumnID = iota
+	downloadColumnURL
+	downloadColumnAdded
+	downloadColumnState
+	downloadColumnProgress
+	downloadColumnName
+	downloadColumnTooltip
 )
 
 type actionGroup []*glib.SimpleAction
@@ -66,7 +66,7 @@ type downloadManager struct {
 
 func (m *downloadManager) onAppActivate(app Application, c *collectionManager) {
 	m.app = app
-	m.ListView.idColumn = DOWNLOAD_COLUMN_ID
+	m.ListView.idColumn = downloadColumnID
 	m.ListView.onCurrentChanged = func(d *download) {
 		enabled := d != nil
 		m.downloadActions.setEnabled(enabled)
@@ -301,13 +301,13 @@ func (d *download) GetID() database.RowID {
 func (d *download) GetDisplay() (columns []int, values []interface{}) {
 	d.locked(func() {
 		columns = []int{
-			DOWNLOAD_COLUMN_ID,
-			DOWNLOAD_COLUMN_URL,
-			DOWNLOAD_COLUMN_ADDED,
-			DOWNLOAD_COLUMN_STATE,
-			DOWNLOAD_COLUMN_PROGRESS,
-			DOWNLOAD_COLUMN_NAME,
-			DOWNLOAD_COLUMN_TOOLTIP,
+			downloadColumnID,
+			downloadColumnURL,
+			downloadColumnAdded,
+			downloadColumnState,
+			downloadColumnProgress,
+			downloadColumnName,
+			downloadColumnTooltip,
 		}
 		values = []interface{}{
 			d.ID,
