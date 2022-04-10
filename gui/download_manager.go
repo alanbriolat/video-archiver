@@ -28,6 +28,15 @@ const (
 	downloadColumnTooltip
 )
 
+type downloadStage uint8
+
+const (
+	downloadStageNew        downloadStage = 0
+	downloadStageMatched    downloadStage = 1
+	downloadStageResolved   downloadStage = 2
+	downloadStageDownloaded downloadStage = 3
+)
+
 type actionGroup []*glib.SimpleAction
 
 func newActionGroup(actions ...*glib.SimpleAction) actionGroup {
@@ -89,7 +98,7 @@ func (m *downloadManager) onAppActivate(app Application, c *collectionManager) {
 		var items []*download
 		if m.collection != nil {
 			for _, dbDownload := range generic.Unwrap(m.app.DB().GetDownloadsByCollectionID(m.collection.ID)) {
-				items = append(items, newDownloadFromDB(dbDownload))
+				items = append(items, newDownloadFromDB(dbDownload, m.collection))
 			}
 		}
 		return items
@@ -144,7 +153,8 @@ func (m *downloadManager) onActionNew() {
 			v.AddError("collection", "Must select a collection")
 		}
 		if v.IsOk() {
-			m.MustAddItem(newDownloadFromDB(d))
+			m.MustAddItem(newDownloadFromDB(d, m.collection))
+			// TODO: automatically do match + recon
 			break
 		} else {
 			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
@@ -200,16 +210,8 @@ func (m *downloadManager) onActionDelete() {
 
 func (m *downloadManager) onActionStart() {
 	m.app.Logger().Info("onActionStart")
-	if m.current.cancel != nil {
-		m.app.Logger().Info("doing nothing, task in progress")
-	}
-	if m.current.Match == nil {
-		m.current.doMatch(m.app)
-	} else if m.current.Resolved == nil {
-		m.current.doRecon(m.app)
-	} else if m.current.State == database.DownloadStateReady {
-		m.current.doDownload(m.app, generic.Unwrap(m.createDownloadBuilder()))
-	}
+	// TODO: run to downloadStageDownloaded
+	m.current.run(m.app, m.current.currentStage+1)
 }
 
 func (m *downloadManager) onActionStop() {
@@ -225,7 +227,7 @@ func (m *downloadManager) addDownloadURL(text string) error {
 	} else if err := validateURL(text); err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	} else {
-		m.MustAddItem(newDownloadFromDB(database.Download{CollectionID: m.collection.ID, URL: text}))
+		m.MustAddItem(newDownloadFromDB(database.Download{CollectionID: m.collection.ID, URL: text}, m.collection))
 		return nil
 	}
 }
@@ -241,31 +243,21 @@ func (m *downloadManager) setCollection(c *collection) {
 	m.MustRefresh()
 }
 
-func (m *downloadManager) createDownloadBuilder() (video_archiver.DownloadBuilder, error) {
-	if m.collection == nil {
-		return nil, fmt.Errorf("no collection selected")
-	} else if m.current == nil {
-		return nil, fmt.Errorf("no download selected")
-	} else if m.collection.ID != m.current.CollectionID {
-		return nil, fmt.Errorf("selected download does not belong to selected collection")
-	}
-	prefix := strings.TrimRight(m.collection.Path, string(os.PathSeparator)) + string(os.PathSeparator)
-	builder := video_archiver.NewDownloadBuilder().WithTargetPrefix(prefix)
-	return builder, nil
-}
-
 type download struct {
 	database.Download
-	updated  chan<- *download
-	mu       sync.Mutex
-	progress int
-	Match    *video_archiver.Match
-	Resolved video_archiver.ResolvedSource
-	cancel   context.CancelFunc
+	Collection   *collection
+	updated      chan<- *download
+	mu           sync.Mutex
+	progress     int
+	Match        *video_archiver.Match
+	Resolved     video_archiver.ResolvedSource
+	currentStage downloadStage
+	targetStage  downloadStage
+	cancel       context.CancelFunc
 }
 
-func newDownloadFromDB(dbDownload database.Download) *download {
-	return &download{Download: dbDownload}
+func newDownloadFromDB(dbDownload database.Download, collection *collection) *download {
+	return &download{Download: dbDownload, Collection: collection}
 }
 
 func (d *download) locked(f func()) {
@@ -278,6 +270,162 @@ func (d *download) updating(f func()) {
 	d.locked(f)
 	if d.updated != nil {
 		d.updated <- d
+	}
+}
+
+func (d *download) run(app Application, targetStage downloadStage) {
+	var ctx context.Context
+	d.locked(func() {
+		if targetStage <= d.currentStage {
+			// Already reached this stage, so ignore the request
+			return
+		} else if targetStage <= d.targetStage {
+			// Already going to reach this stage, so ignore the request
+			return
+		} else {
+			d.targetStage = targetStage
+		}
+		if d.cancel != nil {
+			return
+		} else {
+			ctx, d.cancel = context.WithCancel(app.Context())
+		}
+	})
+	if ctx != nil {
+		go func() {
+			defer func() { d.cancel = nil }()
+			d.asyncRun(app, ctx)
+			// Once we stop running, set target stage to the latest stage reached, so that a repeat request for the old
+			// target stage (e.g. retrying a download) will trigger the goroutine again.
+			d.locked(func() {
+				d.targetStage = d.currentStage
+			})
+		}()
+	}
+}
+
+func (d *download) shouldRunStage(stage downloadStage) (run bool) {
+	d.locked(func() {
+		run = d.targetStage >= stage && d.currentStage == stage-1
+	})
+	return run
+}
+
+func (d *download) asyncRun(app Application, ctx context.Context) {
+	logger := d.getLogger(app)
+	if d.shouldRunStage(downloadStageMatched) {
+		var provider string
+		var url string
+		d.locked(func() {
+			provider = d.Provider
+			url = d.URL
+		})
+		var match *video_archiver.Match
+		var err error
+		if provider != "" {
+			// If we matched with a specific provider previously, use specifically that provider this time
+			logger.Debugf("matching using provider '%v'", provider)
+			match, err = app.ProviderRegistry().MatchWith(provider, url)
+		} else {
+			// ... otherwise match against any provider
+			logger.Debug("matching with any provider")
+			match, err = app.ProviderRegistry().Match(url)
+		}
+		if err == nil {
+			logger.Debugf("successfully matched with provider '%v'", match.ProviderName)
+			d.updating(func() {
+				d.Provider = match.ProviderName
+				d.Match = match
+				d.State = database.DownloadStateNew
+				d.Error = ""
+				d.Name = match.Source.String()
+				d.currentStage = downloadStageMatched
+			})
+		} else {
+			logger.Errorf("failed to match: %v", err)
+			d.updating(func() {
+				d.Provider = ""
+				d.Match = nil
+				d.State = database.DownloadStateError
+				d.Error = err.Error()
+				d.Name = ""
+			})
+			// Hit an error, so can't continue any further
+			return
+		}
+	}
+
+	if d.shouldRunStage(downloadStageResolved) {
+		logger.Debug("starting recon")
+		resolved, err := d.Match.Source.Recon(ctx)
+		if err == nil {
+			logger.Debug("recon complete")
+			d.updating(func() {
+				d.Resolved = resolved
+				d.State = database.DownloadStateReady
+				d.Error = ""
+				d.Name = d.Resolved.String()
+				d.currentStage = downloadStageResolved
+			})
+		} else {
+			logger.Errorf("failed to recon: %v", err)
+			d.updating(func() {
+				d.Resolved = nil
+				d.State = database.DownloadStateError
+				d.Error = err.Error()
+				d.Name = ""
+			})
+			// Hit an error, so can't continue any further
+			return
+		}
+	}
+
+	if d.shouldRunStage(downloadStageDownloaded) {
+		logger.Debug("starting download")
+		prefix := strings.TrimRight(d.Collection.Path, string(os.PathSeparator)) + string(os.PathSeparator)
+		builder := video_archiver.NewDownloadBuilder().WithTargetPrefix(prefix).WithContext(ctx).WithProgressCallback(func(downloaded int, expected int) {
+			var progress int
+			if expected == 0 {
+				progress = 0
+			} else {
+				progress = (downloaded * 100) / expected
+			}
+			if progress != d.progress {
+				// TODO: rate-limit update frequency
+				d.updating(func() {
+					d.progress = progress
+				})
+			}
+		})
+		d.updating(func() {
+			d.State = database.DownloadStateDownloading
+		})
+		err := func() error {
+			if download, err := builder.Build(); err != nil {
+				logger.Errorf("failed to create download: %v", err)
+				return err
+			} else if err = d.Resolved.Download(download); err != nil {
+				logger.Errorf("failed to download: %v", err)
+				return err
+			} else {
+				logger.Debug("download complete")
+				return nil
+			}
+		}()
+		if err == nil {
+			d.updating(func() {
+				d.State = database.DownloadStateComplete
+				d.Error = ""
+				d.currentStage = downloadStageDownloaded
+			})
+		} else {
+			d.updating(func() {
+				d.State = database.DownloadStateError
+				d.Error = err.Error()
+			})
+			// Hit an error, so can't continue any further
+			return
+		}
 	}
 }
 
@@ -340,133 +488,6 @@ func (d *download) getDisplayTooltip() string {
 	sb := &strings.Builder{}
 	generic.Unwrap_(downloadTooltipTemplate.Execute(sb, d))
 	return sb.String()
-}
-
-func (d *download) doMatch(app Application) {
-	logger := d.getLogger(app)
-	/// Do nothing if we've already been matched
-	if d.Match != nil {
-		logger.Debug("skipping match, already matched")
-		return
-	}
-	var match *video_archiver.Match
-	var err error
-	if d.Provider != "" {
-		// If we matched with a specific provider previously, use specifically that provider this time
-		logger.Debugf("matching using provider '%v'", d.Provider)
-		match, err = app.ProviderRegistry().MatchWith(d.Provider, d.URL)
-	} else {
-		// ... otherwise match against any provider
-		logger.Debug("matching with any provider")
-		match, err = app.ProviderRegistry().Match(d.URL)
-	}
-	// Update download state
-	d.updating(func() {
-		if err == nil {
-			logger.Debugf("successfully matched with provider '%v'", match.ProviderName)
-			d.Provider = match.ProviderName
-			d.Match = match
-			d.State = database.DownloadStateNew
-			d.Error = ""
-			d.Name = match.Source.String()
-		} else {
-			logger.Errorf("failed to match: %v", err)
-			d.Provider = ""
-			d.Match = nil
-			d.State = database.DownloadStateError
-			d.Error = err.Error()
-			d.Name = ""
-		}
-	})
-}
-
-func (d *download) doRecon(app Application) {
-	logger := d.getLogger(app)
-	if d.cancel != nil {
-		logger.Warn("skipping doRecon(), task already in progress")
-		return
-	} else if d.Match == nil {
-		logger.Warn("skipping doRecon(), no provider match")
-		return
-	}
-	logger.Debug("starting recon")
-	var ctx context.Context
-	ctx, d.cancel = context.WithCancel(app.Context())
-	go func() {
-		defer func() { d.cancel = nil }()
-		resolved, err := d.Match.Source.Recon(ctx)
-		d.updating(func() {
-			if err == nil {
-				logger.Debug("recon complete")
-				d.Resolved = resolved
-				d.State = database.DownloadStateReady
-				d.Error = ""
-				d.Name = d.Resolved.String()
-			} else {
-				logger.Errorf("failed to recon download: %v", err)
-				d.Resolved = nil
-				d.State = database.DownloadStateError
-				d.Error = err.Error()
-				d.Name = ""
-			}
-		})
-	}()
-}
-
-func (d *download) doDownload(app Application, builder video_archiver.DownloadBuilder) {
-	logger := d.getLogger(app)
-	if d.cancel != nil {
-		logger.Warn("skipping download, task already in progress")
-		return
-	} else if d.Resolved == nil {
-		logger.Warn("skipping download, recon not complete")
-		return
-	}
-	logger.Debug("starting download")
-	var ctx context.Context
-	ctx, d.cancel = context.WithCancel(app.Context())
-	builder = builder.WithContext(ctx).WithProgressCallback(func(downloaded int, expected int) {
-		var progress int
-		if expected == 0 {
-			progress = 0
-		} else {
-			progress = (downloaded * 100) / expected
-		}
-		if progress != d.progress {
-			// TODO: rate-limit update frequency
-			d.updating(func() {
-				d.progress = progress
-			})
-		}
-	})
-	d.updating(func() {
-		d.State = database.DownloadStateDownloading
-	})
-	go func() {
-		defer func() { d.cancel = nil }()
-		download, err := builder.Build()
-		if err != nil {
-			logger.Errorf("failed to create download: %v", err)
-			d.updating(func() {
-				d.State = database.DownloadStateError
-				d.Error = err.Error()
-			})
-			return
-		}
-		err = d.Resolved.Download(download)
-		if err != nil {
-			logger.Errorf("failed to download: %v", err)
-			d.updating(func() {
-				d.State = database.DownloadStateError
-				d.Error = err.Error()
-			})
-			return
-		}
-		logger.Debug("download complete")
-		d.updating(func() {
-			d.State = database.DownloadStateComplete
-		})
-	}()
 }
 
 func (d *download) String() string {
