@@ -74,8 +74,16 @@ func (m *downloadManager) onAppActivate(app Application, c *collectionManager) {
 			m.OnCurrentChanged(d)
 		}
 	}
-	m.ListView.onItemUpdated = func(d *download) {
+	m.ListView.onItemAdding = func(d *download) {
+		if d.ID == database.NullRowID {
+			generic.Unwrap_(m.app.DB().InsertDownload(&d.Download))
+		}
+	}
+	m.ListView.onItemUpdating = func(d *download) {
 		generic.Unwrap_(m.app.DB().UpdateDownload(&d.Download))
+	}
+	m.ListView.onItemRemoving = func(d *download) {
+		generic.Unwrap_(m.app.DB().DeleteDownload(m.current.ID))
 	}
 	m.ListView.onRefresh = func() []*download {
 		var items []*download
@@ -136,7 +144,7 @@ func (m *downloadManager) onActionNew() {
 			v.AddError("collection", "Must select a collection")
 		}
 		if v.IsOk() {
-			m.create(&d)
+			m.MustAddItem(newDownloadFromDB(d))
 			break
 		} else {
 			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
@@ -162,8 +170,9 @@ func (m *downloadManager) onActionEdit() {
 			d.CollectionID = m.current.CollectionID
 		}
 		if v.IsOk() {
-			m.current.Download = d
-			m.current.onUpdate()
+			m.current.updating(func() {
+				m.current.Download = d
+			})
 			break
 		} else {
 			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
@@ -186,7 +195,6 @@ func (m *downloadManager) onActionDelete() {
 	if !m.app.RunWarningDialog("Are you sure you want to delete the download \"%v\"?", m.current.URL) {
 		return
 	}
-	generic.Unwrap_(m.app.DB().DeleteDownload(m.current.ID))
 	m.MustRemoveItem(m.current)
 }
 
@@ -217,16 +225,9 @@ func (m *downloadManager) addDownloadURL(text string) error {
 	} else if err := validateURL(text); err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	} else {
-		d := &database.Download{CollectionID: m.collection.ID, URL: text}
-		m.create(d)
+		m.MustAddItem(newDownloadFromDB(database.Download{CollectionID: m.collection.ID, URL: text}))
 		return nil
 	}
-}
-
-func (m *downloadManager) create(dbDownload *database.Download) {
-	generic.Unwrap_(m.app.DB().InsertDownload(dbDownload))
-	d := newDownloadFromDB(*dbDownload)
-	m.MustAddItem(d)
 }
 
 func (m *downloadManager) setCollection(c *collection) {
@@ -267,12 +268,6 @@ func newDownloadFromDB(dbDownload database.Download) *download {
 	return &download{Download: dbDownload}
 }
 
-func (d *download) onUpdate() {
-	if d.updated != nil {
-		d.updated <- d
-	}
-}
-
 func (d *download) locked(f func()) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -281,7 +276,9 @@ func (d *download) locked(f func()) {
 
 func (d *download) updating(f func()) {
 	d.locked(f)
-	d.onUpdate()
+	if d.updated != nil {
+		d.updated <- d
+	}
 }
 
 func (d *download) stop() {

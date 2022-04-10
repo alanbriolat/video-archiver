@@ -28,7 +28,12 @@ type ListView[T ListItem[T]] struct {
 	current     T
 
 	idColumn         int
-	onItemUpdated    func(item T)
+	onItemAdding     func(item T) // Before item added
+	onItemAdded      func(item T) // After item added
+	onItemUpdating   func(item T) // Before item updated
+	onItemUpdated    func(item T) // After item updated
+	onItemRemoving   func(item T) // Before item removed
+	onItemRemoved    func(item T) // After item removed
 	onCurrentChanged func(item T)
 	onRefresh        func() []T
 }
@@ -77,16 +82,26 @@ func (v *ListView[T]) SelectionDisabled(f func()) {
 }
 
 func (v *ListView[T]) MustAddItem(item T) {
+	if v.onItemAdding != nil {
+		v.onItemAdding(item)
+	}
 	iter := v.Store.Append()
 	treePath := generic.Unwrap(v.Store.GetPath(iter))
 	treeRef := generic.Unwrap(gtk.TreeRowReferenceNew(v.Store.ToTreeModel(), treePath))
-	v.items[item.GetID()] = item
-	v.treeRefs[item.GetID()] = treeRef
+	id := item.GetID()
+	v.items[id] = item
+	v.treeRefs[id] = treeRef
 	item.Bind(v.itemUpdated)
+	if v.onItemAdded != nil {
+		v.onItemAdded(item)
+	}
 	v.MustUpdateItem(item)
 }
 
 func (v *ListView[T]) MustRemoveItem(item T) {
+	if v.onItemRemoving != nil {
+		v.onItemRemoving(item)
+	}
 	id := item.GetID()
 	iter := generic.Unwrap(v.Store.GetIter(v.treeRefs[id].GetPath()))
 	v.selection.UnselectIter(iter)
@@ -96,16 +111,22 @@ func (v *ListView[T]) MustRemoveItem(item T) {
 	})
 	delete(v.items, item.GetID())
 	delete(v.treeRefs, item.GetID())
+	if v.onItemRemoved != nil {
+		v.onItemRemoved(item)
+	}
 }
 
 func (v *ListView[T]) MustUpdateItem(item T) {
-	if v.onItemUpdated != nil {
-		v.onItemUpdated(item)
+	if v.onItemUpdating != nil {
+		v.onItemUpdating(item)
 	}
 	id := item.GetID()
 	iter := generic.Unwrap(v.Store.GetIter(v.treeRefs[id].GetPath()))
 	columns, values := item.GetDisplay()
 	generic.Unwrap_(v.Store.Set(iter, columns, values))
+	if v.onItemUpdated != nil {
+		v.onItemUpdated(item)
+	}
 }
 
 func (v *ListView[T]) MustRefresh() {

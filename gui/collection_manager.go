@@ -43,8 +43,16 @@ func (m *collectionManager) onAppActivate(app Application) {
 			m.OnCurrentChanged(c)
 		}
 	}
-	m.ListView.onItemUpdated = func(c *collection) {
+	m.ListView.onItemAdding = func(c *collection) {
+		if c.ID == database.NullRowID {
+			generic.Unwrap_(m.app.DB().InsertCollection(&c.Collection))
+		}
+	}
+	m.ListView.onItemUpdating = func(c *collection) {
 		generic.Unwrap_(m.app.DB().UpdateCollection(&c.Collection))
+	}
+	m.ListView.onItemRemoving = func(c *collection) {
+		generic.Unwrap_(m.app.DB().DeleteCollection(m.current.ID))
 	}
 	m.ListView.onRefresh = func() []*collection {
 		var items []*collection
@@ -88,7 +96,7 @@ func (m *collectionManager) onNewButtonClicked() {
 			v.AddError("path", "Collection path must be set")
 		}
 		if v.IsOk() {
-			m.create(&c)
+			m.MustAddItem(newCollectionFromDB(c))
 			break
 		} else {
 			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
@@ -114,8 +122,9 @@ func (m *collectionManager) onEditButtonClicked() {
 			v.AddError("path", "Collection path must be set")
 		}
 		if v.IsOk() {
-			m.current.Collection = c
-			m.current.onUpdate()
+			m.current.updating(func() {
+				m.current.Collection = c
+			})
 			break
 		} else {
 			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
@@ -127,14 +136,7 @@ func (m *collectionManager) onDeleteButtonClicked() {
 	if !m.app.RunWarningDialog("Are you sure you want to delete the collection \"%s\"?", m.current.Name) {
 		return
 	}
-	generic.Unwrap_(m.app.DB().DeleteCollection(m.current.ID))
 	m.MustRemoveItem(m.current)
-}
-
-func (m *collectionManager) create(dbCollection *database.Collection) {
-	generic.Unwrap_(m.app.DB().InsertCollection(dbCollection))
-	c := newCollectionFromDB(*dbCollection)
-	m.MustAddItem(c)
 }
 
 type collection struct {
@@ -147,7 +149,14 @@ func newCollectionFromDB(dbCollection database.Collection) *collection {
 	return &collection{Collection: dbCollection}
 }
 
-func (c *collection) onUpdate() {
+func (c *collection) locked(f func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	f()
+}
+
+func (c *collection) updating(f func()) {
+	c.locked(f)
 	if c.updated != nil {
 		c.updated <- c
 	}
