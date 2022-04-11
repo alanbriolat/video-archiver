@@ -281,7 +281,11 @@ type download struct {
 }
 
 func newDownloadFromDB(dbDownload database.Download, collection *collection) *download {
-	return &download{Download: dbDownload, Collection: collection}
+	d := &download{Download: dbDownload, Collection: collection}
+	if d.State == database.DownloadStateComplete {
+		d.currentStage = downloadStageDownloaded
+	}
+	return d
 }
 
 func (d *download) locked(f func()) {
