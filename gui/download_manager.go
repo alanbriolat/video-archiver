@@ -555,5 +555,5 @@ var downloadTooltipTemplate = template.Must(
 	template.New("tooltip").Funcs(template.FuncMap{"trim": strings.TrimSpace}).Parse(strings.TrimSpace(`
 {{if .Provider}}[{{ .Provider }}] {{end}}{{ .URL }}{{if .Error}}
 
-{{ trim .Error }}{{end}}
+{{ html (trim .Error) }}{{end}}
 `)))
