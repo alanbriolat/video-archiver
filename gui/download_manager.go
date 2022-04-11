@@ -274,34 +274,43 @@ func (d *download) updating(f func()) {
 }
 
 func (d *download) run(app Application, targetStage downloadStage) {
-	var ctx context.Context
+	logger := d.getLogger(app)
 	d.locked(func() {
+		logger.Debugf("run(): current=%v target=%v newTarget=%v", d.currentStage, d.targetStage, targetStage)
 		if targetStage <= d.currentStage {
 			// Already reached this stage, so ignore the request
+			logger.Debug("ignoring new target stage, already reached")
 			return
 		} else if targetStage <= d.targetStage {
 			// Already going to reach this stage, so ignore the request
+			logger.Debug("ignoring new target stage, already targeted")
 			return
-		} else {
-			d.targetStage = targetStage
 		}
+		logger.Debugf("updating target stage to %v", targetStage)
+		d.targetStage = targetStage
 		if d.cancel != nil {
+			logger.Debug("download already running, not spawning goroutine")
 			return
 		} else {
+			logger.Debug("download not running, will spawn goroutine")
+			var ctx context.Context
 			ctx, d.cancel = context.WithCancel(app.Context())
+			go func() {
+				defer func() { d.cancel = nil }()
+				logger.Debug("download goroutine started")
+				d.asyncRun(app, ctx)
+				// Once we stop running, set target stage to the latest stage reached, so that a repeat request for the old
+				// target stage (e.g. retrying a download) will trigger the goroutine again.
+				d.locked(func() {
+					if d.currentStage != d.targetStage {
+						logger.Warnf("didn't reach target stage %v, changing to match current stage %v", d.targetStage, d.currentStage)
+						d.targetStage = d.currentStage
+					}
+				})
+				logger.Debug("download goroutine ended")
+			}()
 		}
 	})
-	if ctx != nil {
-		go func() {
-			defer func() { d.cancel = nil }()
-			d.asyncRun(app, ctx)
-			// Once we stop running, set target stage to the latest stage reached, so that a repeat request for the old
-			// target stage (e.g. retrying a download) will trigger the goroutine again.
-			d.locked(func() {
-				d.targetStage = d.currentStage
-			})
-		}()
-	}
 }
 
 func (d *download) shouldRunStage(stage downloadStage) (run bool) {
