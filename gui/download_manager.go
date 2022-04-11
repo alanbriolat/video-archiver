@@ -62,6 +62,7 @@ type downloadManager struct {
 	actionDelete      *glib.SimpleAction
 	actionStart       *glib.SimpleAction
 	actionStop        *glib.SimpleAction
+	actionRefresh     *glib.SimpleAction
 	collectionActions actionGroup
 	downloadActions   actionGroup
 
@@ -118,6 +119,7 @@ func (m *downloadManager) onAppActivate(app Application, c *collectionManager) {
 	// TODO: awareness of current download state
 	m.actionStart = m.app.RegisterSimpleWindowAction("start_download", nil, m.onActionStart)
 	m.actionStop = m.app.RegisterSimpleWindowAction("stop_download", nil, m.onActionStop)
+	m.actionRefresh = m.app.RegisterSimpleWindowAction("refresh_download", nil, m.onActionRefresh)
 
 	// Actions that require a collection to be selected
 	m.collectionActions = newActionGroup(m.actionPaste)
@@ -230,6 +232,17 @@ func (m *downloadManager) onActionStop() {
 	m.current.stop()
 }
 
+func (m *downloadManager) onActionRefresh() {
+	m.app.Logger().Info("onActionRefresh")
+	if m.current.isRunning() {
+		// TODO: handle this in a better way, e.g. not enabling refresh during running, or stopping before refresh
+		m.app.Logger().Warn("download running, not doing refresh")
+		return
+	}
+	m.current.reset()
+	m.current.run(m.app, downloadStageResolved)
+}
+
 func (m *downloadManager) addDownloadURL(text string) error {
 	if text == "" {
 		return fmt.Errorf("no URL provided")
@@ -297,6 +310,10 @@ func (d *download) reset() {
 	})
 }
 
+func (d *download) isRunning() bool {
+	return d.cancel != nil
+}
+
 func (d *download) run(app Application, targetStage downloadStage) {
 	logger := d.getLogger(app)
 	d.locked(func() {
@@ -312,7 +329,7 @@ func (d *download) run(app Application, targetStage downloadStage) {
 		}
 		logger.Debugf("updating target stage to %v", targetStage)
 		d.targetStage = targetStage
-		if d.cancel != nil {
+		if d.isRunning() {
 			logger.Debug("download already running, not spawning goroutine")
 			return
 		} else {

@@ -42,6 +42,11 @@
     <property name="can_focus">False</property>
     <property name="stock">gtk-edit</property>
   </object>
+  <object class="GtkImage" id="icon_refresh">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-refresh</property>
+  </object>
   <object class="GtkImage" id="icon_start">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -322,7 +327,7 @@
                           <object class="GtkButton">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="receives_default">True</property>
+                            <property name="receives_default">False</property>
                             <property name="tooltip_text" translatable="yes">Delete download</property>
                             <property name="action_name">win.delete_download</property>
                             <property name="image">icon_delete</property>
@@ -336,7 +341,7 @@
                           <object class="GtkButton">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="receives_default">True</property>
+                            <property name="receives_default">False</property>
                             <property name="tooltip_text" translatable="yes">Edit download</property>
                             <property name="action_name">win.edit_download</property>
                             <property name="image">icon_edit</property>
@@ -349,7 +354,21 @@
                           <object class="GtkButton">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="receives_default">True</property>
+                            <property name="receives_default">False</property>
+                            <property name="tooltip_text" translatable="yes">Refresh dowload</property>
+                            <property name="action_name">win.refresh_download</property>
+                            <property name="image">icon_refresh</property>
+                          </object>
+                          <packing>
+                            <property name="pack_type">end</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkButton">
+                            <property name="visible">True</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
                             <property name="tooltip_text" translatable="yes">Stop download</property>
                             <property name="action_name">win.stop_download</property>
                             <property name="image">icon_stop</property>
