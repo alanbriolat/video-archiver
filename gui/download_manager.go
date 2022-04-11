@@ -88,6 +88,11 @@ func (m *downloadManager) onAppActivate(app Application, c *collectionManager) {
 			generic.Unwrap_(m.app.DB().InsertDownload(&d.Download))
 		}
 	}
+	m.ListView.onItemAdded = func(d *download) {
+		if d.State == database.DownloadStateNew {
+			d.run(m.app, downloadStageResolved)
+		}
+	}
 	m.ListView.onItemUpdating = func(d *download) {
 		generic.Unwrap_(m.app.DB().UpdateDownload(&d.Download))
 	}
@@ -154,7 +159,6 @@ func (m *downloadManager) onActionNew() {
 		}
 		if v.IsOk() {
 			m.MustAddItem(newDownloadFromDB(d, m.collection))
-			// TODO: automatically do match + recon
 			break
 		} else {
 			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
@@ -180,9 +184,17 @@ func (m *downloadManager) onActionEdit() {
 			d.CollectionID = m.current.CollectionID
 		}
 		if v.IsOk() {
+			shouldReset := false
 			m.current.updating(func() {
+				if d.URL != m.current.URL {
+					shouldReset = true
+				}
 				m.current.Download = d
 			})
+			if shouldReset {
+				m.current.reset()
+				m.current.run(m.app, downloadStageResolved)
+			}
 			break
 		} else {
 			m.dlgEdit.showError(strings.Join(v.GetAllErrors(), "\n"))
@@ -210,8 +222,7 @@ func (m *downloadManager) onActionDelete() {
 
 func (m *downloadManager) onActionStart() {
 	m.app.Logger().Info("onActionStart")
-	// TODO: run to downloadStageDownloaded
-	m.current.run(m.app, m.current.currentStage+1)
+	m.current.run(m.app, downloadStageDownloaded)
 }
 
 func (m *downloadManager) onActionStop() {
@@ -271,6 +282,19 @@ func (d *download) updating(f func()) {
 	if d.updated != nil {
 		d.updated <- d
 	}
+}
+
+func (d *download) reset() {
+	d.updating(func() {
+		d.currentStage = downloadStageNew
+		d.targetStage = d.currentStage
+		d.Match = nil
+		d.Resolved = nil
+		d.State = database.DownloadStateNew
+		d.Error = ""
+		d.Provider = ""
+		d.Name = ""
+	})
 }
 
 func (d *download) run(app Application, targetStage downloadStage) {
