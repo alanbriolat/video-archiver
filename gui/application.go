@@ -1,11 +1,16 @@
 package gui
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
+	"log"
+	"os"
+	"os/signal"
 
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	"go.uber.org/zap"
 
 	"github.com/alanbriolat/video-archiver/generic"
 )
@@ -117,4 +122,26 @@ func (a *application) onShutdown() {
 
 	a.Downloads.onAppShutdown()
 	a.Collections.onAppShutdown()
+}
+
+func Main() {
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		log.Fatalf("can't initialize logger: %v", err)
+	}
+	defer logger.Sync()
+	zap.RedirectStdLog(logger)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	// Ensure the signal handler is cleaned up so repeated signals are less graceful
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
+
+	env := generic.Unwrap(NewEnvBuilder().Context(ctx).Logger(logger).UserConfigDir(DefaultAppName).Build())
+	app := generic.Unwrap(NewApplication(env, DefaultAppID))
+
+	exitCode := app.Run()
+	os.Exit(exitCode)
 }
