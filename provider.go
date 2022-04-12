@@ -2,8 +2,11 @@ package video_archiver
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"sort"
+
+	"github.com/hashicorp/go-multierror"
 
 	"github.com/alanbriolat/video-archiver/generic"
 )
@@ -110,6 +113,7 @@ func (r *ProviderRegistry) List() []string {
 
 // Match a string against each Provider in priority order, or return ErrNoMatch.
 func (r *ProviderRegistry) Match(s string) (*Match, error) {
+	var result error
 	for _, p := range r.providers {
 		if source, err := p.Match(s); source != nil && err == nil {
 			match := &Match{
@@ -117,9 +121,11 @@ func (r *ProviderRegistry) Match(s string) (*Match, error) {
 				Source:       source,
 			}
 			return match, nil
+		} else {
+			result = multierror.Append(result, multierror.Prefix(err, fmt.Sprintf("[%v]", p.Name)))
 		}
 	}
-	return nil, ErrNoMatch
+	return nil, result
 }
 
 // MatchWith will attempt to match a string against a specific provider.

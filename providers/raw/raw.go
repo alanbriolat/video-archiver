@@ -23,11 +23,11 @@ func NewConfig() Config {
 			"https",
 		),
 		Extensions: generic.NewSet(
-			"flv",
-			"m4v",
-			"mkv",
-			"mp4",
-			"webm",
+			".flv",
+			".m4v",
+			".mkv",
+			".mp4",
+			".webm",
 		),
 	}
 }

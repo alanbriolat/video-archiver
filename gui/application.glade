@@ -1,0 +1,448 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated with glade 3.22.2 -->
+<interface>
+  <requires lib="gtk+" version="3.20"/>
+  <object class="GtkListStore" id="collections_store">
+    <columns>
+      <!-- column-name id -->
+      <column type="gint64"/>
+      <!-- column-name name -->
+      <column type="gchararray"/>
+      <!-- column-name path -->
+      <column type="gchararray"/>
+      <!-- column-name id_str -->
+      <column type="gchararray"/>
+    </columns>
+  </object>
+  <object class="GtkListStore" id="downloads_store">
+    <columns>
+      <!-- column-name id -->
+      <column type="gint64"/>
+      <!-- column-name url -->
+      <column type="gchararray"/>
+      <!-- column-name added -->
+      <column type="gchararray"/>
+      <!-- column-name state -->
+      <column type="gchararray"/>
+      <!-- column-name progress -->
+      <column type="gint"/>
+      <!-- column-name name -->
+      <column type="gchararray"/>
+      <!-- column-name tooltip -->
+      <column type="gchararray"/>
+    </columns>
+  </object>
+  <object class="GtkImage" id="icon_delete">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-delete</property>
+  </object>
+  <object class="GtkImage" id="icon_edit">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-edit</property>
+  </object>
+  <object class="GtkImage" id="icon_refresh">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-refresh</property>
+  </object>
+  <object class="GtkImage" id="icon_start">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-media-play</property>
+  </object>
+  <object class="GtkImage" id="icon_stop">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-media-stop</property>
+  </object>
+  <object class="GtkApplicationWindow" id="window_main">
+    <property name="can_focus">False</property>
+    <property name="default_width">800</property>
+    <property name="default_height">600</property>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkToolbar">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <child>
+              <object class="GtkToolButton">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="tooltip_text" translatable="yes">Create new collection</property>
+                <property name="action_name">win.new_collection</property>
+                <property name="label" translatable="yes">New collection</property>
+                <property name="use_underline">True</property>
+                <property name="stock_id">gtk-open</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="homogeneous">True</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkToolButton">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="tooltip_text" translatable="yes">Edit selected collection</property>
+                <property name="action_name">win.edit_collection</property>
+                <property name="label" translatable="yes">Edit collection</property>
+                <property name="use_underline">True</property>
+                <property name="stock_id">gtk-properties</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="homogeneous">True</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkToolButton">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="tooltip_text" translatable="yes">Delete selected collection</property>
+                <property name="action_name">win.delete_collection</property>
+                <property name="label" translatable="yes">Delete collection</property>
+                <property name="use_underline">True</property>
+                <property name="stock_id">gtk-delete</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="homogeneous">True</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSeparatorToolItem">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="homogeneous">True</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkToolButton">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="tooltip_text" translatable="yes">Add new download</property>
+                <property name="action_name">win.new_download</property>
+                <property name="label" translatable="yes">New download</property>
+                <property name="use_underline">True</property>
+                <property name="stock_id">gtk-add</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="homogeneous">True</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkToolButton">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="tooltip_text" translatable="yes">Paste download URL</property>
+                <property name="action_name">win.paste_download</property>
+                <property name="label" translatable="yes">Paste URL</property>
+                <property name="use_underline">True</property>
+                <property name="stock_id">gtk-paste</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="homogeneous">True</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkPaned">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="orientation">vertical</property>
+            <property name="position">200</property>
+            <property name="position_set">True</property>
+            <property name="wide_handle">True</property>
+            <child>
+              <object class="GtkBox" id="pane_collections">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="orientation">vertical</property>
+                <child>
+                  <object class="GtkScrolledWindow">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <child>
+                      <object class="GtkTreeView" id="collections_tree">
+                        <property name="visible">True</property>
+                        <property name="can_focus">True</property>
+                        <property name="model">collections_store</property>
+                        <property name="search_column">1</property>
+                        <property name="activate_on_single_click">True</property>
+                        <child internal-child="selection">
+                          <object class="GtkTreeSelection"/>
+                        </child>
+                        <child>
+                          <object class="GtkTreeViewColumn" id="column_collection_name">
+                            <property name="title" translatable="yes">Collection name</property>
+                            <property name="clickable">True</property>
+                            <property name="sort_column_id">1</property>
+                            <child>
+                              <object class="GtkCellRendererText" id="cell_collection_name"/>
+                              <attributes>
+                                <attribute name="text">1</attribute>
+                              </attributes>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkTreeViewColumn" id="column_collection_path">
+                            <property name="title" translatable="yes">Path</property>
+                            <child>
+                              <object class="GtkCellRendererText" id="cell_collection_path"/>
+                              <attributes>
+                                <attribute name="text">2</attribute>
+                              </attributes>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="resize">True</property>
+                <property name="shrink">True</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkPaned" id="downloads_pane">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="orientation">vertical</property>
+                <property name="position">200</property>
+                <property name="position_set">True</property>
+                <property name="wide_handle">True</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="orientation">vertical</property>
+                    <child>
+                      <object class="GtkScrolledWindow">
+                        <property name="visible">True</property>
+                        <property name="can_focus">True</property>
+                        <child>
+                          <object class="GtkTreeView" id="downloads_tree">
+                            <property name="visible">True</property>
+                            <property name="can_focus">True</property>
+                            <property name="model">downloads_store</property>
+                            <property name="enable_search">False</property>
+                            <property name="search_column">0</property>
+                            <property name="tooltip_column">6</property>
+                            <child internal-child="selection">
+                              <object class="GtkTreeSelection"/>
+                            </child>
+                            <child>
+                              <object class="GtkTreeViewColumn" id="column_download_name">
+                                <property name="resizable">True</property>
+                                <property name="title" translatable="yes">URL</property>
+                                <property name="expand">True</property>
+                                <property name="clickable">True</property>
+                                <property name="sort_column_id">1</property>
+                                <child>
+                                  <object class="GtkCellRendererText" id="cell_download_name"/>
+                                  <attributes>
+                                    <attribute name="text">5</attribute>
+                                  </attributes>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkTreeViewColumn" id="column_download_state">
+                                <property name="title" translatable="yes">State</property>
+                                <property name="clickable">True</property>
+                                <property name="sort_column_id">3</property>
+                                <child>
+                                  <object class="GtkCellRendererText" id="cell_download_state"/>
+                                  <attributes>
+                                    <attribute name="text">3</attribute>
+                                  </attributes>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkTreeViewColumn" id="column_download_progress">
+                                <property name="title" translatable="yes">Progress</property>
+                                <property name="clickable">True</property>
+                                <property name="sort_column_id">4</property>
+                                <child>
+                                  <object class="GtkCellRendererProgress" id="cell_download_progress"/>
+                                  <attributes>
+                                    <attribute name="value">4</attribute>
+                                  </attributes>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkTreeViewColumn" id="column_download_added">
+                                <property name="title" translatable="yes">Added</property>
+                                <property name="clickable">True</property>
+                                <property name="sort_column_id">2</property>
+                                <child>
+                                  <object class="GtkCellRendererText" id="cell_download_added"/>
+                                  <attributes>
+                                    <attribute name="text">2</attribute>
+                                  </attributes>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="expand">True</property>
+                        <property name="fill">True</property>
+                        <property name="position">0</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkActionBar">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <child>
+                          <object class="GtkButton">
+                            <property name="visible">True</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
+                            <property name="tooltip_text" translatable="yes">Delete download</property>
+                            <property name="action_name">win.delete_download</property>
+                            <property name="image">icon_delete</property>
+                            <property name="always_show_image">True</property>
+                          </object>
+                          <packing>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkButton">
+                            <property name="visible">True</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
+                            <property name="tooltip_text" translatable="yes">Edit download</property>
+                            <property name="action_name">win.edit_download</property>
+                            <property name="image">icon_edit</property>
+                          </object>
+                          <packing>
+                            <property name="position">1</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkButton">
+                            <property name="visible">True</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
+                            <property name="tooltip_text" translatable="yes">Refresh dowload</property>
+                            <property name="action_name">win.refresh_download</property>
+                            <property name="image">icon_refresh</property>
+                          </object>
+                          <packing>
+                            <property name="pack_type">end</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkButton">
+                            <property name="visible">True</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
+                            <property name="tooltip_text" translatable="yes">Stop download</property>
+                            <property name="action_name">win.stop_download</property>
+                            <property name="image">icon_stop</property>
+                            <property name="always_show_image">True</property>
+                          </object>
+                          <packing>
+                            <property name="pack_type">end</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkButton">
+                            <property name="visible">True</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">True</property>
+                            <property name="tooltip_text" translatable="yes">Start download</property>
+                            <property name="action_name">win.start_download</property>
+                            <property name="image">icon_start</property>
+                            <property name="always_show_image">True</property>
+                          </object>
+                          <packing>
+                            <property name="pack_type">end</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">1</property>
+                      </packing>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="resize">True</property>
+                    <property name="shrink">True</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkBox" id="downloads_details_pane">
+                    <property name="can_focus">False</property>
+                    <property name="orientation">vertical</property>
+                    <child>
+                      <placeholder/>
+                    </child>
+                    <child>
+                      <placeholder/>
+                    </child>
+                    <child>
+                      <placeholder/>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="resize">True</property>
+                    <property name="shrink">True</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="resize">True</property>
+                <property name="shrink">True</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>
