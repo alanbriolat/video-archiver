@@ -261,6 +261,7 @@
                             </child>
                             <child>
                               <object class="GtkTreeViewColumn" id="column_download_name">
+                                <property name="resizable">True</property>
                                 <property name="title" translatable="yes">URL</property>
                                 <property name="expand">True</property>
                                 <property name="clickable">True</property>
@@ -276,6 +277,8 @@
                             <child>
                               <object class="GtkTreeViewColumn" id="column_download_state">
                                 <property name="title" translatable="yes">State</property>
+                                <property name="clickable">True</property>
+                                <property name="sort_column_id">3</property>
                                 <child>
                                   <object class="GtkCellRendererText" id="cell_download_state"/>
                                   <attributes>
