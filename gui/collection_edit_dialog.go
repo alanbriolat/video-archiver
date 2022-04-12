@@ -1,7 +1,7 @@
 package gui
 
 import (
-	"path"
+	"path/filepath"
 
 	"github.com/gotk3/gotk3/gtk"
 
@@ -25,7 +25,7 @@ func newCollectionEditDialog() *collectionEditDialog {
 		if dirPath == "" {
 			dirName = ""
 		} else {
-			dirName = path.Base(dirPath)
+			dirName = filepath.Base(dirPath)
 		}
 		d.Name.SetPlaceholderText(dirName)
 	})

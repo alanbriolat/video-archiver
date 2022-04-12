@@ -125,7 +125,7 @@ func (m *downloadManager) onAppActivate(app Application, c *collectionManager) {
 	m.collectionActions = newActionGroup(m.actionPaste)
 	m.collectionActions.setEnabled(false)
 	// Actions that require a download to be selected
-	m.downloadActions = newActionGroup(m.actionEdit, m.actionDelete, m.actionStart, m.actionStop)
+	m.downloadActions = newActionGroup(m.actionEdit, m.actionDelete, m.actionStart, m.actionStop, m.actionRefresh)
 	m.downloadActions.setEnabled(false)
 
 	// Get additional GTK references
