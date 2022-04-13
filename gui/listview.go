@@ -121,9 +121,12 @@ func (v *ListView[T]) MustUpdateItem(item T) {
 		v.onItemUpdating(item)
 	}
 	id := item.GetID()
-	iter := generic.Unwrap(v.Store.GetIter(v.treeRefs[id].GetPath()))
-	columns, values := item.GetDisplay()
-	generic.Unwrap_(v.Store.Set(iter, columns, values))
+	// Only attempt to update the view if this is an item we know about
+	if treeRef, ok := v.treeRefs[id]; ok {
+		iter := generic.Unwrap(v.Store.GetIter(treeRef.GetPath()))
+		columns, values := item.GetDisplay()
+		generic.Unwrap_(v.Store.Set(iter, columns, values))
+	}
 	if v.onItemUpdated != nil {
 		v.onItemUpdated(item)
 	}
@@ -131,12 +134,17 @@ func (v *ListView[T]) MustUpdateItem(item T) {
 
 func (v *ListView[T]) MustRefresh() {
 	var items []T
+	// Get new items
 	if v.onRefresh != nil {
 		items = v.onRefresh()
 	}
+	// Make sure nothing is selected
 	v.selection.UnselectAll()
+	// Remove all old items, insert new items
 	v.SelectionDisabled(func() {
 		v.Store.Clear()
+		v.items = make(map[database.RowID]T)
+		v.treeRefs = make(map[database.RowID]*gtk.TreeRowReference)
 		for _, item := range items {
 			v.MustAddItem(item)
 		}
