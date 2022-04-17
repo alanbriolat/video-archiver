@@ -25,7 +25,7 @@ fmt:
 
 .PHONY: test
 test:
-	go test ./...
+	go test -race ./...
 
 .PHONY: clean
 clean:
