@@ -20,13 +20,18 @@ func TestSimple(t *testing.T) {
 	r := rw.RMutexer()
 	assert.Equal(123, rw.Get())
 	assert.Equal(123, r.Get())
-	assert.Equal(123, rw.Swap(456))
-	assert.Equal(456, r.Get())
+	rw.Set(234)
+	assert.Equal(234, rw.Get())
+	assert.Equal(234, r.Get())
+	assert.Equal(234, rw.Swap(345))
+	assert.Equal(345, rw.Get())
+	assert.Equal(345, r.Get())
 }
 
 func TestRace(t *testing.T) {
 	assert := assert_.New(t)
-	rw := NewRWMutexed(0)
+	value := 0
+	rw := NewRWMutexed(&value)
 	start := NewEvent()
 	wg := sync.WaitGroup{}
 
@@ -61,5 +66,5 @@ func TestRace(t *testing.T) {
 	start.Set()
 	wg.Wait()
 
-	assert.Equal(2500, rw.Get())
+	assert.Equal(2500, *rw.Get())
 }

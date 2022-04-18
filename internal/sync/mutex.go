@@ -4,7 +4,7 @@ import "sync"
 
 type RMutexer[T any] interface {
 	// Locked runs a functions with the lock acquired.
-	Locked(f func(*T) error) error
+	Locked(f func(T) error) error
 	// Get returns a copy of the inner value.
 	Get() T
 }
@@ -27,10 +27,10 @@ func NewMutexed[T any](value T) *Mutexed[T] {
 	return m
 }
 
-func (m *Mutexed[T]) Locked(f func(*T) error) error {
+func (m *Mutexed[T]) Locked(f func(T) error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return f(&m.value)
+	return f(m.value)
 }
 
 func (m *Mutexed[T]) Get() T {
@@ -63,10 +63,15 @@ func NewRWMutexed[T any](value T) *RWMutexed[T] {
 	return m
 }
 
-func (m *RWMutexed[T]) Locked(f func(*T) error) error {
+func (m *RWMutexed[T]) Locked(f func(T) error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return f(&m.value)
+	return f(m.value)
+}
+
+// RLocked is a shortcut for Locked() on RWMutexed.RMutexer().
+func (m *RWMutexed[T]) RLocked(f func(T) error) error {
+	return m.RMutexer().Locked(f)
 }
 
 func (m *RWMutexed[T]) Get() T {
@@ -97,8 +102,8 @@ type rwMutexedReader[T any] struct {
 	*RWMutexed[T]
 }
 
-func (m *rwMutexedReader[T]) Locked(f func(*T) error) error {
+func (m *rwMutexedReader[T]) Locked(f func(T) error) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return f(&m.value)
+	return f(m.value)
 }
