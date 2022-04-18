@@ -25,7 +25,8 @@ fmt:
 
 .PHONY: test
 test:
-	go test -race ./...
+	# The `-count 1` disables test result caching (good for flaky tests)
+	go test -race -covermode atomic -coverprofile cover.out -count 1 ./...
 
 .PHONY: clean
 clean:
