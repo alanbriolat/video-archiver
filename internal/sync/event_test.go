@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -96,5 +97,24 @@ func TestEventAsync(t *testing.T) {
 	case <-unblockedDone:
 	case <-time.After(5 * time.Second):
 		assert.Fail("event should not have blocked goroutines")
+	}
+}
+
+func BenchmarkEvent_Wait(b *testing.B) {
+	for nGoroutines := 1; nGoroutines <= 512; nGoroutines *= 2 {
+		b.Run(fmt.Sprintf("%d-goro", nGoroutines), func(b *testing.B) {
+			var event Event
+			var wg sync.WaitGroup
+			wg.Add(nGoroutines)
+			for i := 0; i < nGoroutines; i++ {
+				go func() {
+					defer wg.Done()
+					for j := 0; j < b.N; j++ {
+						_ = event.Wait()
+					}
+				}()
+			}
+			wg.Wait()
+		})
 	}
 }

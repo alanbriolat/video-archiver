@@ -46,10 +46,22 @@ func (e *Event) Wait() <-chan struct{} {
 }
 
 func (e *Event) getChannel(alreadyLocked bool) chan struct{} {
+	// Only fiddle with locks if not already locked as part of another operation (i.e. Clear())
 	if !alreadyLocked {
-		e.mu.Lock()
-		defer e.mu.Unlock()
+		// Try to get the channel with only a read lock
+		e.mu.RLock()
+		if e.ch != nil {
+			// Channel already exists, can return it
+			defer e.mu.RUnlock()
+			return e.ch
+		} else {
+			// Channel doesn't exist, exchange read lock for write lock and then fall through to "already locked" code
+			e.mu.RUnlock()
+			e.mu.Lock()
+			defer e.mu.Unlock()
+		}
 	}
+	// Only create a new channel if one doesn't exist
 	if e.ch == nil {
 		e.ch = make(chan struct{})
 	}
