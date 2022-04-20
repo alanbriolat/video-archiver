@@ -10,7 +10,7 @@ import (
 
 func TestEventSync(t *testing.T) {
 	assert := assert_.New(t)
-	e := NewEvent()
+	var e Event
 	// Initial value should be unset
 	assert.False(e.IsSet())
 	// Waiting on the event should block
@@ -20,7 +20,7 @@ func TestEventSync(t *testing.T) {
 	default:
 	}
 	// Can we set the event?
-	e.Set()
+	assert.True(e.Set())
 	assert.True(e.IsSet())
 	// Waiting on the event should succeed immediately
 	select {
@@ -28,11 +28,11 @@ func TestEventSync(t *testing.T) {
 	default:
 		assert.Fail("<-e.Wait() should not block")
 	}
-	// Setting the event should be idempotent
-	e.Set()
+	// Setting the event should be idempotent, but also aware of the current state
+	assert.False(e.Set())
 	assert.True(e.IsSet())
 	// Can we clear the event?
-	e.Clear()
+	assert.True(e.Clear())
 	assert.False(e.IsSet())
 	// Waiting on the event should block again
 	select {
@@ -40,14 +40,14 @@ func TestEventSync(t *testing.T) {
 		assert.Fail("<-e.Wait() should be blocking")
 	default:
 	}
-	// Clearing the event should be idempotent
-	e.Clear()
+	// Clearing the event should be idempotent, but also aware of the current state
+	assert.False(e.Clear())
 	assert.False(e.IsSet())
 }
 
 func TestEventAsync(t *testing.T) {
 	assert := assert_.New(t)
-	e := NewEvent()
+	var e Event
 	wg := sync.WaitGroup{}
 
 	for i := 0; i < 100; i++ {

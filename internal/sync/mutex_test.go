@@ -14,7 +14,7 @@ var _ RMutexer[int] = NewRWMutexed(123)
 var _ Mutexer[int] = NewRWMutexed(123)
 var _ RMutexer[int] = NewRWMutexed(123).RMutexer()
 
-func TestSimple(t *testing.T) {
+func TestRWMutexed_Simple(t *testing.T) {
 	assert := assert_.New(t)
 	rw := NewRWMutexed(123)
 	r := rw.RMutexer()
@@ -28,11 +28,11 @@ func TestSimple(t *testing.T) {
 	assert.Equal(345, r.Get())
 }
 
-func TestRace(t *testing.T) {
+func TestRWMutexed_Race(t *testing.T) {
 	assert := assert_.New(t)
 	value := 0
 	rw := NewRWMutexed(&value)
-	start := NewEvent()
+	var start Event
 	wg := sync.WaitGroup{}
 
 	// Increment by 2500 with 50 goroutines in parallel

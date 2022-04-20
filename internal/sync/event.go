@@ -3,55 +3,55 @@ package sync
 import "sync"
 
 // Event is inspired by Python's `threading.Event`, providing an asynchronous boolean flag that goroutines can wait on.
-type Event interface {
-	// IsSet returns the current state of the event.
-	IsSet() bool
-	// Set ensures the event is true (idempotent), notifying any waiters.
-	Set()
-	// Clear ensures the event is false (idempotent).
-	Clear()
-	// Wait returns a channel that will close when the event is true (which may be immediately).
-	Wait() <-chan struct{}
-}
-
-type event struct {
+type Event struct {
 	mu    sync.RWMutex
-	c     chan struct{}
+	ch    chan struct{}
 	value bool
 }
 
-func NewEvent() Event {
-	return &event{
-		c: make(chan struct{}),
-	}
-}
-
-func (e *event) IsSet() bool {
+// IsSet returns the current state of the Event.
+func (e *Event) IsSet() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.value
 }
 
-func (e *event) Set() {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if !e.value {
-		e.value = true
-		close(e.c)
-	}
-}
-
-func (e *event) Clear() {
+// Set ensures the Event is true (idempotent), notifying any waiters. Returns true if the state was changed.
+func (e *Event) Set() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.value {
-		e.value = false
-		e.c = make(chan struct{})
+		return false
 	}
+	e.value = true
+	close(e.getChannel(true))
+	return true
 }
 
-func (e *event) Wait() <-chan struct{} {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return e.c
+// Clear ensures the Event is false (idempotent). Returns true if the state was changed.
+func (e *Event) Clear() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !e.value {
+		return false
+	}
+	e.value = false
+	e.ch = nil // Next getChannel() will create a new channel
+	return true
+}
+
+// Wait returns a channel that will close when the Event is true (which may be immediately).
+func (e *Event) Wait() <-chan struct{} {
+	return e.getChannel(false)
+}
+
+func (e *Event) getChannel(alreadyLocked bool) chan struct{} {
+	if !alreadyLocked {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+	}
+	if e.ch == nil {
+		e.ch = make(chan struct{})
+	}
+	return e.ch
 }
