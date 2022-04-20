@@ -14,6 +14,7 @@ type Receiver[T any] interface {
 
 type Closer interface {
 	Close()
+	Closed() <-chan struct{}
 }
 
 type SenderCloser[T any] interface {
@@ -99,4 +100,8 @@ func (c *channel[T]) Close() {
 	// Close the channel to notify receiver(s)
 	close(c.ch)
 	c.closed = true
+}
+
+func (c *channel[T]) Closed() <-chan struct{} {
+	return c.done
 }

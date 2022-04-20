@@ -118,6 +118,10 @@ func (p *publisher[T]) Close() {
 	p.closed = true
 }
 
+func (p *publisher[T]) Closed() <-chan struct{} {
+	return p.ch.Closed()
+}
+
 type subscriber[T any] struct {
 	channel[T]
 }

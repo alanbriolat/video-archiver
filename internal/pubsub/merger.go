@@ -108,3 +108,7 @@ func (m *Merger[T]) Close() {
 	// Mark the Merger as closed forever
 	m.closed = true
 }
+
+func (m *Merger[T]) Closed() <-chan struct{} {
+	return m.done
+}
