@@ -9,7 +9,7 @@ import (
 	"github.com/alanbriolat/video-archiver/generic"
 )
 
-var _ Subscriber[int] = &Merger[int]{}
+var _ ReceiverCloser[int] = &Merger[int]{}
 
 func TestMerger_Add_Close(t *testing.T) {
 	assert := assert_.New(t)

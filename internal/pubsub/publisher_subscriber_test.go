@@ -8,9 +8,8 @@ import (
 )
 
 var _ Publisher[int] = &publisher[int]{}
-var _ Subscriber[int] = &subscriber[int]{}
 
-func TestSimple(t *testing.T) {
+func TestPublisher(t *testing.T) {
 	assert := assert_.New(t)
 	pub := NewPublisher[int]().(*publisher[int])
 

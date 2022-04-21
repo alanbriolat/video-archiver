@@ -18,11 +18,9 @@ var (
 
 type Publisher[T any] interface {
 	SenderCloser[T]
-	Subscribe() (Subscriber[T], error)
-}
-
-type Subscriber[T any] interface {
-	ReceiverCloser[T]
+	AddSubscriber(SenderCloser[T]) error
+	Subscribe() (ReceiverCloser[T], error)
+	SubscribeBufSize(int) (ReceiverCloser[T], error)
 }
 
 type publisher[T any] struct {
@@ -30,7 +28,7 @@ type publisher[T any] struct {
 	ch          Channel[T]
 	running     sync.WaitGroup // Goroutines in progress
 	pending     sync.WaitGroup // Messages not yet sent to all subscribers
-	subscribers generic.Set[*subscriber[T]]
+	subscribers generic.Set[SenderCloser[T]]
 	closed      bool
 }
 
@@ -41,7 +39,7 @@ func NewPublisher[T any]() Publisher[T] {
 func NewPublisherBufSize[T any](bufSize int) Publisher[T] {
 	p := &publisher[T]{
 		ch:          NewChannel[T](bufSize),
-		subscribers: generic.NewSet[*subscriber[T]](),
+		subscribers: generic.NewPolymorphicSet[SenderCloser[T]](),
 	}
 	p.running.Add(1)
 	go func() {
@@ -75,22 +73,30 @@ func (p *publisher[T]) Send(msg T) bool {
 	}
 }
 
-func (p *publisher[T]) Subscribe() (Subscriber[T], error) {
+func (p *publisher[T]) Subscribe() (ReceiverCloser[T], error) {
 	return p.SubscribeBufSize(DefaultSubscriberBufSize)
 }
 
-func (p *publisher[T]) SubscribeBufSize(bufSize int) (Subscriber[T], error) {
+func (p *publisher[T]) SubscribeBufSize(bufSize int) (ReceiverCloser[T], error) {
+	s := NewChannel[T](bufSize)
+	if err := p.AddSubscriber(s); err != nil {
+		return nil, err
+	} else {
+		return s, nil
+	}
+}
+
+func (p *publisher[T]) AddSubscriber(s SenderCloser[T]) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
-		return nil, ErrPublisherClosed
+		return ErrPublisherClosed
 	}
-	s := newSubscriber[T](bufSize)
 	p.subscribers.Add(s)
-	return s, nil
+	return nil
 }
 
-func (p *publisher[T]) unsubscribe(s *subscriber[T]) {
+func (p *publisher[T]) unsubscribe(s SenderCloser[T]) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.subscribers.Remove(s)
@@ -120,12 +126,4 @@ func (p *publisher[T]) Close() {
 
 func (p *publisher[T]) Closed() <-chan struct{} {
 	return p.ch.Closed()
-}
-
-type subscriber[T any] struct {
-	channel[T]
-}
-
-func newSubscriber[T any](bufSize int) *subscriber[T] {
-	return &subscriber[T]{newChannel[T](bufSize)}
 }
