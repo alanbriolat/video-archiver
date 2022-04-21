@@ -52,9 +52,12 @@ func TestPipe_Close_In(t *testing.T) {
 	assert := assert_.New(t)
 
 	in, out, _ := NewPipe[int]()
+	// Close the input
 	in.Close()
-	_, ok := <-out.Receive()
-	if ok {
+	// The output must also become closed
+	<-out.Closed()
+	// And receives should now show the channel as closed
+	if _, ok := <-out.Receive(); ok {
 		assert.Fail("expected pipe output to be closed")
 	}
 }
@@ -63,7 +66,11 @@ func TestPipe_Close_Out(t *testing.T) {
 	assert := assert_.New(t)
 
 	in, out, _ := NewPipe[int]()
+	// Close the output
 	out.Close()
+	// The input must also become closed
+	<-in.Closed()
+	// And sends should now fail
 	assert.False(in.Send(1), "expected pipe input to be closed")
 }
 
