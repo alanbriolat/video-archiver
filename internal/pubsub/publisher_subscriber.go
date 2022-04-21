@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/alanbriolat/video-archiver/generic"
+	sync_ "github.com/alanbriolat/video-archiver/internal/sync"
 )
 
 const (
@@ -28,7 +29,7 @@ type publisher[T any] struct {
 	ch          Channel[T]
 	running     sync.WaitGroup // Goroutines in progress
 	pending     sync.WaitGroup // Messages not yet sent to all subscribers
-	subscribers generic.Set[SenderCloser[T]]
+	subscribers *sync_.Mutexed[generic.Set[SenderCloser[T]]]
 	closed      bool
 }
 
@@ -39,18 +40,20 @@ func NewPublisher[T any]() Publisher[T] {
 func NewPublisherBufSize[T any](bufSize int) Publisher[T] {
 	p := &publisher[T]{
 		ch:          NewChannel[T](bufSize),
-		subscribers: generic.NewPolymorphicSet[SenderCloser[T]](),
+		subscribers: sync_.NewMutexed[generic.Set[SenderCloser[T]]](generic.NewPolymorphicSet[SenderCloser[T]]()),
 	}
 	p.running.Add(1)
 	go func() {
 		defer p.running.Done()
 		for v := range p.ch.Receive() {
-			// Hold lock for minimum amount of time to get the latest set of subscribers
-			p.mu.Lock()
-			subscribers := p.subscribers.ToSlice()
-			p.mu.Unlock()
+			// Get the latest set of subscribers, to avoid holding a lock that prevents adding new subscribers
+			var subscriberSlice []SenderCloser[T]
+			_ = p.subscribers.Locked(func(subscribers generic.Set[SenderCloser[T]]) error {
+				subscriberSlice = subscribers.ToSlice()
+				return nil
+			})
 			// Attempt to send to each subscriber
-			for _, s := range subscribers {
+			for _, s := range subscriberSlice {
 				if ok := s.Send(v); !ok {
 					p.unsubscribe(s)
 				}
@@ -92,14 +95,17 @@ func (p *publisher[T]) AddSubscriber(s SenderCloser[T]) error {
 	if p.closed {
 		return ErrPublisherClosed
 	}
-	p.subscribers.Add(s)
-	return nil
+	return p.subscribers.Locked(func(subscribers generic.Set[SenderCloser[T]]) error {
+		subscribers.Add(s)
+		return nil
+	})
 }
 
 func (p *publisher[T]) unsubscribe(s SenderCloser[T]) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.subscribers.Remove(s)
+	_ = p.subscribers.Locked(func(subscribers generic.Set[SenderCloser[T]]) error {
+		subscribers.Remove(s)
+		return nil
+	})
 }
 
 // Close idempotently shuts down the publisher, closing all subscribers too.
@@ -115,9 +121,13 @@ func (p *publisher[T]) Close() {
 	p.pending.Wait()
 	p.running.Wait()
 	// Close all subscribers, waiting for each one to end
-	subscribers := p.subscribers.ToSlice()
-	p.subscribers.Clear()
-	for _, s := range subscribers {
+	var subscriberSlice []SenderCloser[T]
+	_ = p.subscribers.Locked(func(subscribers generic.Set[SenderCloser[T]]) error {
+		subscriberSlice = subscribers.ToSlice()
+		subscribers.Clear()
+		return nil
+	})
+	for _, s := range subscriberSlice {
 		s.Close()
 	}
 	// Finally, record the publisher as closed
