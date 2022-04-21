@@ -64,6 +64,11 @@ func (r Result[T]) Ok() Option[T] {
 	}
 }
 
+// Parts transforms the Result[T] into the typical (T, error) return value of a function.
+func (r Result[T]) Parts() (T, error) {
+	return r.Value, r.Error
+}
+
 // Unwrap returns the contained value, or panics if IsErr.
 func (r Result[T]) Unwrap() T {
 	return r.Expect("tried to Unwrap() an Err")
