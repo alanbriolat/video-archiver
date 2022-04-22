@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	"github.com/alanbriolat/video-archiver/generic"
-	sync_ "github.com/alanbriolat/video-archiver/internal/sync"
+	"github.com/alanbriolat/video-archiver/internal/sync_"
 )
 
 var (
