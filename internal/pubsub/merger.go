@@ -17,8 +17,8 @@ type Merger[T any] struct {
 	closed  bool
 }
 
-func NewMerger[T any](receivers ...interface{}) Merger[T] {
-	return NewMergerBufSize[T](DefaultMergerBufSize, receivers...)
+func NewMerger[T any](in ...interface{}) Merger[T] {
+	return NewMergerBufSize[T](DefaultMergerBufSize, in...)
 }
 
 func NewMergerBufSize[T any](bufSize int, receivers ...interface{}) Merger[T] {
@@ -32,8 +32,8 @@ func NewMergerBufSize[T any](bufSize int, receivers ...interface{}) Merger[T] {
 	return m
 }
 
-func (m *Merger[T]) Add(receiver interface{}) bool {
-	switch r := receiver.(type) {
+func (m *Merger[T]) Add(in interface{}) bool {
+	switch r := in.(type) {
 	case ReceiverCloser[T]:
 		return m.AddPrimitive(r.Receive(), r.Close)
 	//case Receiver[T]:
@@ -41,7 +41,7 @@ func (m *Merger[T]) Add(receiver interface{}) bool {
 	case chan T:
 		return m.AddPrimitive(r, nil)
 	default:
-		panic(fmt.Sprintf("unhandled receiver type: %T", receiver))
+		panic(fmt.Sprintf("unhandled input channel type: %T", in))
 	}
 }
 
