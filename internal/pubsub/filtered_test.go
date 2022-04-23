@@ -57,7 +57,7 @@ func TestFilteredSender_Publisher_AddSubscriber(t *testing.T) {
 	pub := NewPublisher[int]()
 	ch := NewChannel[int](1)
 	filtered := NewFilteredSender[int](ch, func(v int) bool { return v%2 == 0 })
-	assert.Nil(pub.AddSubscriber(filtered))
+	assert.Nil(pub.AddSubscriber(filtered, true))
 	senderDone := make(chan struct{})
 	var running sync.WaitGroup
 	running.Add(2)

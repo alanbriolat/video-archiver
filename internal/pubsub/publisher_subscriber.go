@@ -4,7 +4,6 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/alanbriolat/video-archiver/generic"
 	"github.com/alanbriolat/video-archiver/internal/sync_"
 )
 
@@ -19,17 +18,19 @@ var (
 
 type Publisher[T any] interface {
 	SenderCloser[T]
-	AddSubscriber(SenderCloser[T]) error
+	AddSubscriber(s SenderCloser[T], close bool) error
 	Subscribe() (ReceiverCloser[T], error)
 	SubscribeBufSize(int) (ReceiverCloser[T], error)
 }
+
+type subscriberMap[T any] map[SenderCloser[T]]bool
 
 type publisher[T any] struct {
 	mu          sync.Mutex
 	ch          Channel[T]
 	running     sync.WaitGroup // Goroutines in progress
 	pending     sync.WaitGroup // Messages not yet sent to all subscribers
-	subscribers *sync_.Mutexed[generic.Set[SenderCloser[T]]]
+	subscribers *sync_.Mutexed[subscriberMap[T]]
 	closed      bool
 }
 
@@ -40,7 +41,7 @@ func NewPublisher[T any]() Publisher[T] {
 func NewPublisherBufSize[T any](bufSize int) Publisher[T] {
 	p := &publisher[T]{
 		ch:          NewChannel[T](bufSize),
-		subscribers: sync_.NewMutexed[generic.Set[SenderCloser[T]]](generic.NewPolymorphicSet[SenderCloser[T]]()),
+		subscribers: sync_.NewMutexed[subscriberMap[T]](make(subscriberMap[T])),
 	}
 	p.running.Add(1)
 	go func() {
@@ -48,8 +49,11 @@ func NewPublisherBufSize[T any](bufSize int) Publisher[T] {
 		for v := range p.ch.Receive() {
 			// Get the latest set of subscribers, to avoid holding a lock that prevents adding new subscribers
 			var subscriberSlice []SenderCloser[T]
-			_ = p.subscribers.Locked(func(subscribers generic.Set[SenderCloser[T]]) error {
-				subscriberSlice = subscribers.ToSlice()
+			_ = p.subscribers.Locked(func(subscribers subscriberMap[T]) error {
+				subscriberSlice = make([]SenderCloser[T], 0, len(subscribers))
+				for s, _ := range subscribers {
+					subscriberSlice = append(subscriberSlice, s)
+				}
 				return nil
 			})
 			// Attempt to send to each subscriber
@@ -82,28 +86,33 @@ func (p *publisher[T]) Subscribe() (ReceiverCloser[T], error) {
 
 func (p *publisher[T]) SubscribeBufSize(bufSize int) (ReceiverCloser[T], error) {
 	s := NewChannel[T](bufSize)
-	if err := p.AddSubscriber(s); err != nil {
+	if err := p.AddSubscriber(s, true); err != nil {
 		return nil, err
 	} else {
 		return s, nil
 	}
 }
 
-func (p *publisher[T]) AddSubscriber(s SenderCloser[T]) error {
+// AddSubscriber registers a SenderCloser to receive messages from the Publisher. If `subscriber` is closed while the
+// Publisher is not, it will automatically become unsubscribed. If `close` is true, then when the Publisher is closed,
+// `subscriber` will also be closed. If `subscriber` is already subscribed, the `close` flag will be updated.
+func (p *publisher[T]) AddSubscriber(subscriber SenderCloser[T], close bool) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
 		return ErrPublisherClosed
 	}
-	return p.subscribers.Locked(func(subscribers generic.Set[SenderCloser[T]]) error {
-		subscribers.Add(s)
+	return p.subscribers.Locked(func(subscribers subscriberMap[T]) error {
+		subscribers[subscriber] = close
 		return nil
 	})
 }
 
 func (p *publisher[T]) unsubscribe(s SenderCloser[T]) {
-	_ = p.subscribers.Locked(func(subscribers generic.Set[SenderCloser[T]]) error {
-		subscribers.Remove(s)
+	_ = p.subscribers.Locked(func(subscribers subscriberMap[T]) error {
+		if _, ok := subscribers[s]; ok {
+			delete(subscribers, s)
+		}
 		return nil
 	})
 }
@@ -121,14 +130,11 @@ func (p *publisher[T]) Close() {
 	p.pending.Wait()
 	p.running.Wait()
 	// Close all subscribers, waiting for each one to end
-	var subscriberSlice []SenderCloser[T]
-	_ = p.subscribers.Locked(func(subscribers generic.Set[SenderCloser[T]]) error {
-		subscriberSlice = subscribers.ToSlice()
-		subscribers.Clear()
-		return nil
-	})
-	for _, s := range subscriberSlice {
-		s.Close()
+	subscribers := p.subscribers.Swap(nil)
+	for subscriber, closeSubscriber := range subscribers {
+		if closeSubscriber {
+			subscriber.Close()
+		}
 	}
 	// Finally, record the publisher as closed
 	p.closed = true

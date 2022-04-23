@@ -79,3 +79,17 @@ func TestPublisher(t *testing.T) {
 	// Closing should be idempotent
 	pub.Close()
 }
+
+func TestPublisher_AddSubscriber_Close(t *testing.T) {
+	assert := assert_.New(t)
+
+	pub := NewPublisher[int]()
+	c1 := NewChannel[int](1)
+	c2 := NewChannel[int](1)
+	assert.Nil(pub.AddSubscriber(c1, true))
+	assert.Nil(pub.AddSubscriber(c2, false))
+	// When the publisher is closed, it should obey the "close" flag for each of its subscribers
+	pub.Close()
+	assert.False(c1.Send(1), "expected close=true subscriber to be closed")
+	assert.True(c2.Send(1), "expected close=false subscriber to not be closed")
+}
