@@ -30,7 +30,7 @@ type Session struct {
 	log       *zap.SugaredLogger
 
 	downloads *sync_.RWMutexed[downloadsByID]
-	events    pubsub.Publisher[interface{}]
+	events    pubsub.Publisher[Event]
 }
 
 func New(config Config, ctx context.Context) (*Session, error) {
@@ -43,11 +43,11 @@ func New(config Config, ctx context.Context) (*Session, error) {
 
 		downloads: sync_.NewRWMutexed(make(downloadsByID)),
 	}
-	s.events = pubsub.NewPublisher[interface{}]()
+	s.events = pubsub.NewPublisher[Event]()
 	return s, nil
 }
 
-func (s *Session) Subscribe() (pubsub.ReceiverCloser[interface{}], error) {
+func (s *Session) Subscribe() (pubsub.ReceiverCloser[Event], error) {
 	return s.events.Subscribe()
 }
 

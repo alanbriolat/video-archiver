@@ -45,7 +45,7 @@ func (s *Session) insertDownload(ds DownloadState) (*Download, error) {
 		return nil, err
 	} else {
 		generic.Unwrap_(d.events.AddSubscriber(s.events, false))
-		s.events.Send(DownloadAdded{d})
+		s.events.Send(DownloadAdded{downloadEvent{d}})
 		return d, err
 	}
 }

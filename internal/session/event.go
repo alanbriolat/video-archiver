@@ -1,15 +1,37 @@
 package session
 
-type downloadEvent struct {
-	Download *Download
+type Event interface {
+	// The Download this event relates to (nil if not a Download-specific event).
+	Download() *Download
 }
 
-type DownloadAdded downloadEvent
-type DownloadRemoved downloadEvent
-type DownloadStarted downloadEvent
-type DownloadStopped downloadEvent
-type DownloadUpdated downloadEvent
+type downloadEvent struct {
+	download *Download
+}
+
+func (e downloadEvent) Download() *Download {
+	return e.download
+}
+
+type DownloadAdded struct {
+	downloadEvent
+}
+type DownloadRemoved struct {
+	downloadEvent
+}
+type DownloadStarted struct {
+	downloadEvent
+}
+type DownloadStopped struct {
+	downloadEvent
+	Err error
+}
+type DownloadUpdated struct {
+	downloadEvent
+	OldState DownloadState
+	NewState DownloadState
+}
 type DownloadFileComplete struct {
 	downloadEvent
-	path string
+	Path string
 }

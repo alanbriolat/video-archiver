@@ -7,17 +7,21 @@ func (d *Download) run() {
 
 	for {
 		select {
+		// Download.Close() (or parent context cancelled)
 		case <-d.ctx.Done():
 			d.close()
 			close(d.done)
 			return
+		// Download.State()
 		case ch := <-d.stateCommand:
 			select {
 			case ch <- generic.Ok[DownloadState](d.DownloadState):
 			case <-d.ctx.Done():
 			}
+		// Download.Start()
 		case <-d.startCommand:
 			d.start()
+		// Download.Stop()
 		case <-d.stopCommand:
 			d.stop(nil)
 		}
@@ -36,7 +40,8 @@ func (d *Download) start() {
 		return
 	}
 	d.running.Set()
-	d.events.Send(DownloadStarted{d})
+	// Send "started" event, notifying any subscribers
+	d.events.Send(DownloadStarted{downloadEvent{d}})
 }
 
 func (d *Download) stop(err error) {
@@ -46,7 +51,8 @@ func (d *Download) stop(err error) {
 		return
 	}
 	d.stopped.Set()
-	d.events.Send(DownloadStopped{d})
+	// Send "stopped" event, notifying any subscribers
+	d.events.Send(DownloadStopped{downloadEvent{d}, err})
 }
 
 func (d *Download) updateState(f func(ds *DownloadState)) {
@@ -55,6 +61,8 @@ func (d *Download) updateState(f func(ds *DownloadState)) {
 	// TODO: persist changes to downloadStoredFields
 	//d.session.db.SaveDownload(&d.downloadStoredFields)
 	if d.DownloadState != old {
-		d.events.Send(DownloadUpdated{d})
+		d.events.Send(DownloadUpdated{
+			downloadEvent: downloadEvent{d},
+		})
 	}
 }

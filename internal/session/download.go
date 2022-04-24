@@ -95,7 +95,7 @@ type Download struct {
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
-	events pubsub.Publisher[interface{}]
+	events pubsub.Publisher[Event]
 
 	running      sync_.Event
 	stopped      sync_.Event
@@ -116,7 +116,7 @@ func newDownload(session *Session, state DownloadState) (*Download, error) {
 		ctx:       ctx,
 		ctxCancel: cancel,
 
-		events: pubsub.NewPublisher[interface{}](),
+		events: pubsub.NewPublisher[Event](),
 
 		done:         make(chan struct{}),
 		startCommand: make(chan struct{}),
