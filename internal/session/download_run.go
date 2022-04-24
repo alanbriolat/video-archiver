@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -78,11 +79,6 @@ func (d *Download) stop(err error) {
 	d.active.Wait()
 	d.activeCancel = nil
 
-	// Set the "stopped" condition, notifying any waiters
-	d.stopped.Set()
-	// Send "stopped" event, notifying any subscribers
-	d.events.Send(DownloadStopped{downloadEvent{d}, err})
-
 	// Record the error, if there was one (and if there was, "updated" event will be sent to subscribers)
 	if err != nil {
 		d.updateState(func(ds *DownloadState) {
@@ -90,6 +86,11 @@ func (d *Download) stop(err error) {
 			ds.Status = DownloadStatusError
 		})
 	}
+
+	// Set the "stopped" condition, notifying any waiters
+	d.stopped.Set()
+	// Send "stopped" event, notifying any subscribers
+	d.events.Send(DownloadStopped{downloadEvent{d}, err})
 }
 
 func (d *Download) getState() DownloadState {
@@ -172,7 +173,8 @@ func (d *Download) runInBackground(ctx context.Context) error {
 	}
 
 	prefix := strings.TrimRight(savePath, string(os.PathSeparator)) + string(os.PathSeparator)
-	nextUpdate := time.Now()
+	// Prevent stampede from a lot of downloads starting at the same time always updating at the same time
+	nextUpdate := time.Now().Add(time.Duration(rand.Int63n(int64(d.session.config.ProgressUpdateInterval))))
 	builder := video_archiver.NewDownloadBuilder().WithTargetPrefix(prefix).WithContext(ctx).WithProgressCallback(func(downloaded int, expected int) {
 		now := time.Now()
 		if now.Before(nextUpdate) {
