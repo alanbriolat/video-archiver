@@ -7,16 +7,21 @@ import (
 	"os/signal"
 	"sync"
 
+	"github.com/r3labs/diff/v3"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/alanbriolat/video-archiver/async"
 	"github.com/alanbriolat/video-archiver/internal/session"
+	"github.com/alanbriolat/video-archiver/internal/sync_"
 	_ "github.com/alanbriolat/video-archiver/providers"
 )
 
 func main() {
-	logger, err := zap.NewDevelopment()
+	config := zap.NewDevelopmentConfig()
+	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	logger, err := config.Build()
 	if err != nil {
 		log.Fatalf("can't initialize zap logger: %v", err)
 	}
@@ -81,12 +86,29 @@ func download(ctx context.Context, source string, target string) error {
 	if err != nil {
 		return err
 	}
+	var started sync_.Event
+	var stopped sync_.Event
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for event := range events.Receive() {
-			logger.Debugf("event: %T: %v", event, event)
+			logger.Debugf("event: %T: %v", event, event.Download())
+			switch e := event.(type) {
+			case session.DownloadStarted:
+				started.Set()
+			case session.DownloadStopped:
+				stopped.Set()
+			case session.DownloadUpdated:
+				changes, err := diff.Diff(e.OldState, e.NewState)
+				if err != nil {
+					logger.Errorf("failed to diff old and new download state: %v", err)
+				} else {
+					for _, change := range changes {
+						logger.Debugf("%v: %#v -> %#v", change.Path, change.From, change.To)
+					}
+				}
+			}
 		}
 	}()
 
@@ -94,16 +116,17 @@ func download(ctx context.Context, source string, target string) error {
 	if err != nil {
 		return err
 	}
+	logger.Info("Starting download")
 	dl.Start()
-	<-dl.Running()
-	//dl.Stop()
-	//<-dl.Stopped()
-	//dl.Close()
-	//<-dl.Done()
+	<-started.Wait()
 
 	select {
-	case <-dl.Complete():
-		logger.Info("Download complete")
+	case <-stopped.Wait():
+		if dl.IsComplete() {
+			logger.Info("Download complete")
+		} else {
+			logger.Info("Download stopped")
+		}
 	case <-ctx.Done():
 		logger.Info("Exiting gracefully...")
 	}

@@ -35,12 +35,17 @@ func (d *Download) Running() <-chan struct{} {
 	return d.running.Wait()
 }
 
+func (d *Download) Stopped() <-chan struct{} {
+	return d.stopped.Wait()
+}
+
 func (d *Download) Complete() <-chan struct{} {
 	return d.complete.Wait()
 }
 
-func (d *Download) Stopped() <-chan struct{} {
-	return d.stopped.Wait()
+// IsComplete returns true if the "complete" flag was set. Useful to check after waiting on Stopped.
+func (d *Download) IsComplete() bool {
+	return d.complete.IsSet()
 }
 
 func (d *Download) Close() {

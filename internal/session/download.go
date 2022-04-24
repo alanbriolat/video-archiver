@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -64,7 +65,7 @@ func (s DownloadStatus) NonRunning() DownloadStatus {
 	}
 }
 
-type downloadStoredFields struct {
+type DownloadPersistentState struct {
 	ID       DownloadID
 	URL      string
 	SavePath string
@@ -79,17 +80,18 @@ type downloadStoredFields struct {
 	Name string
 }
 
-type downloadEphemeralFields struct {
+type DownloadEphemeralState struct {
 	Progress int
 }
 
 type DownloadState struct {
-	downloadStoredFields
-	downloadEphemeralFields
+	DownloadPersistentState
+	DownloadEphemeralState
 }
 
 type Download struct {
-	DownloadState
+	state DownloadState
+	mu    sync.RWMutex
 
 	session   *Session
 	ctx       context.Context
@@ -104,13 +106,17 @@ type Download struct {
 	startCommand chan struct{}
 	stopCommand  chan struct{}
 	stateCommand chan chan generic.Result[DownloadState]
+
+	active         sync.WaitGroup
+	activeCancel   context.CancelFunc
+	activeFinished chan error
 }
 
 func newDownload(session *Session, state DownloadState) (*Download, error) {
 	ctx, cancel := context.WithCancel(session.ctx)
 	// TODO: do some sanity checks on the DownloadState
 	d := &Download{
-		DownloadState: state,
+		state: state,
 
 		session:   session,
 		ctx:       ctx,
@@ -122,15 +128,19 @@ func newDownload(session *Session, state DownloadState) (*Download, error) {
 		startCommand: make(chan struct{}),
 		stopCommand:  make(chan struct{}),
 		stateCommand: make(chan chan generic.Result[DownloadState]),
+
+		// Should only be one active background process, so channel buffer of 1 means it should never wait to exit
+		activeFinished: make(chan error, 1),
 	}
+	// TODO: do some additional state manipulation, e.g. setting Progress and "complete" event if status is complete
 	go d.run()
 	return d, nil
 }
 
 func (d *Download) String() string {
-	return fmt.Sprintf("Download{ID:\"%s\", URL:\"%s\", Status:\"%s\"", d.ID, d.URL, d.Status)
+	return fmt.Sprintf("Download{ID:\"%s\"}", d.state.ID)
 }
 
 func (d *Download) log() *zap.SugaredLogger {
-	return zap.S().Named("download").With("download_id", d.ID)
+	return zap.S().Named(fmt.Sprintf("download/%v", d.state.ID))
 }

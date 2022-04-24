@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -14,11 +15,14 @@ import (
 type Config struct {
 	DefaultSavePath  string
 	ProviderRegistry *video_archiver.ProviderRegistry
+	// Minimum interval between DownloadUpdated events from progress updates.
+	ProgressUpdateInterval time.Duration
 }
 
 var DefaultConfig = Config{
-	DefaultSavePath:  ".",
-	ProviderRegistry: &video_archiver.DefaultProviderRegistry,
+	DefaultSavePath:        ".",
+	ProviderRegistry:       &video_archiver.DefaultProviderRegistry,
+	ProgressUpdateInterval: 500 * time.Millisecond,
 }
 
 type downloadsByID = map[DownloadID]*Download
