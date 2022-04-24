@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -13,8 +14,8 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/alanbriolat/video-archiver/async"
+	"github.com/alanbriolat/video-archiver/generic"
 	"github.com/alanbriolat/video-archiver/internal/session"
-	"github.com/alanbriolat/video-archiver/internal/sync_"
 	_ "github.com/alanbriolat/video-archiver/providers"
 )
 
@@ -44,12 +45,8 @@ func main() {
 		},
 		Action: func(c *cli.Context) error {
 			target := c.String("target")
-			for _, source := range c.Args().Slice() {
-				if err := download(ctx, source, target); err != nil {
-					return err
-				}
-			}
-			return nil
+			err := download(ctx, c.Args().Slice(), target)
+			return err
 		},
 		HideHelpCommand: true,
 	}
@@ -70,9 +67,9 @@ func main() {
 	}
 }
 
-func download(ctx context.Context, source string, target string) error {
+func download(ctx context.Context, sources []string, target string) error {
 	logger := zap.S()
-	logger.Infof("Downloading from %s into %s", source, target)
+	logger.Infof("Downloading into %s from %s", target, sources)
 
 	cfg := session.DefaultConfig
 	cfg.DefaultSavePath = target
@@ -82,57 +79,42 @@ func download(ctx context.Context, source string, target string) error {
 	}
 	defer ses.Close()
 
-	events, err := ses.Subscribe()
-	if err != nil {
-		return err
-	}
-	var started sync_.Event
-	var stopped sync_.Event
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for event := range events.Receive() {
-			logger.Debugf("event: %T: %v", event, event.Download())
-			switch e := event.(type) {
-			case session.DownloadStarted:
-				started.Set()
-			case session.DownloadStopped:
-				stopped.Set()
-			case session.DownloadUpdated:
-				changes, err := diff.Diff(e.OldState, e.NewState)
-				if err != nil {
-					logger.Errorf("failed to diff old and new download state: %v", err)
-				} else {
-					for _, change := range changes {
-						logger.Debugf("%v: %#v -> %#v", change.Path, change.From, change.To)
+	var downloads sync.WaitGroup
+	for _, source := range sources {
+		dl, err := ses.AddDownload(source, nil)
+		if err != nil {
+			logger.Errorf("failed to add download for %#v: %v", source, err)
+			continue
+		}
+		downloads.Add(1)
+		go func() {
+			defer downloads.Done()
+			initialState := generic.Unwrap(dl.State())
+			logger := logger.Named(fmt.Sprintf("client/%v", initialState.ID))
+			events := generic.Unwrap(dl.Subscribe())
+			dl.Start()
+			for event := range events.Receive() {
+				logger.Debugf("event %T: %v", event, event.Download())
+				switch e := event.(type) {
+				case session.DownloadUpdated:
+					changes, err := diff.Diff(e.OldState, e.NewState)
+					if err != nil {
+						logger.Errorf("failed to diff old and new download state: %v", err)
+					} else {
+						for _, change := range changes {
+							logger.Debugf("%v: %#v -> %#v", change.Path, change.From, change.To)
+						}
 					}
+				case session.DownloadStopped:
+					state := generic.Unwrap(e.Download().State())
+					logger.Infof("Download stopped with status %#v", state.Status)
+					return
 				}
 			}
-		}
-	}()
-
-	dl, err := ses.AddDownload(source, nil)
-	if err != nil {
-		return err
-	}
-	logger.Info("Starting download")
-	dl.Start()
-	<-started.Wait()
-
-	select {
-	case <-stopped.Wait():
-		if dl.IsComplete() {
-			logger.Info("Download complete")
-		} else {
-			logger.Info("Download stopped")
-		}
-	case <-ctx.Done():
-		logger.Info("Exiting gracefully...")
+		}()
 	}
 
+	downloads.Wait()
 	ses.Close()
-	wg.Wait()
-
 	return nil
 }

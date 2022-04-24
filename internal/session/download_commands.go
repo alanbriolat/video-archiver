@@ -1,6 +1,13 @@
 package session
 
-import "github.com/alanbriolat/video-archiver/generic"
+import (
+	"github.com/alanbriolat/video-archiver/generic"
+	"github.com/alanbriolat/video-archiver/internal/pubsub"
+)
+
+func (d *Download) Subscribe() (pubsub.ReceiverCloser[Event], error) {
+	return d.events.Subscribe()
+}
 
 func (d *Download) State() (DownloadState, error) {
 	ch := make(chan generic.Result[DownloadState], 1)
