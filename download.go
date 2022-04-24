@@ -107,11 +107,11 @@ func (d *download) SaveHTTPRequest(filename string, req *http.Request) error {
 	req = req.WithContext(d.Context())
 	client := http.Client{}
 	resp, err := client.Do(req)
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("404 not found")
-	}
 	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
+	}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("404 not found")
 	}
 	defer resp.Body.Close()
 	d.AddExpectedBytes(int(resp.ContentLength))
