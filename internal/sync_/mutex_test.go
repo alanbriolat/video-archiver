@@ -68,3 +68,14 @@ func TestRWMutexed_Race(t *testing.T) {
 
 	assert.Equal(2500, *rw.Get())
 }
+
+func TestLocked(t *testing.T) {
+	assert := assert_.New(t)
+
+	m := NewMutexed[int](123)
+	result := Locked(m, func(x int) int {
+		return x * 2
+	})
+	assert.Equal(246, result)
+
+}
