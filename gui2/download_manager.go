@@ -1,6 +1,7 @@
 package gui2
 
 import (
+	"html"
 	"strings"
 	"text/template"
 
@@ -166,7 +167,7 @@ func (m *downloadManager) mustUpdateItem(d *session.Download, ds *session.Downlo
 		string(ds.Status),
 		getDownloadStateDisplayProgress(ds),
 		getDownloadStateDisplayName(ds),
-		getDownloadStateDisplayTooltip(ds),
+		html.EscapeString(getDownloadStateDisplayTooltip(ds)),
 	}
 	generic.Unwrap_(m.Store.Set(iter, columns, values))
 }
@@ -228,5 +229,5 @@ var downloadTooltipTemplate = template.Must(
 	template.New("tooltip").Funcs(template.FuncMap{"trim": strings.TrimSpace}).Parse(strings.TrimSpace(`
 {{if .Provider}}[{{ .Provider }}] {{end}}{{ .URL }}{{if .Error}}
 
-{{ html (trim .Error) }}{{end}}
+{{ trim .Error }}{{end}}
 `)))
