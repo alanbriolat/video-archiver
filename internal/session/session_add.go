@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"time"
 
 	"github.com/alanbriolat/video-archiver/generic"
 )
@@ -24,6 +25,7 @@ func (s *Session) AddDownload(url string, opt *AddDownloadOptions) (*Download, e
 	} else {
 		ds.SavePath = s.config.DefaultSavePath
 	}
+	ds.AddedAt = time.Now()
 	return s.insertDownload(ds)
 }
 

@@ -43,7 +43,7 @@ func (r *ValidationResult) GetAllErrors() []string {
 
 var validURLSchemes = generic.NewSet("http", "https")
 
-func validateURL(s string) error {
+func ValidateURL(s string) error {
 	if parsed, err := url.Parse(s); err != nil {
 		return err
 	} else if !validURLSchemes.Contains(parsed.Scheme) {

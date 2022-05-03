@@ -85,6 +85,10 @@ func (d *Download) stop(err error) {
 			ds.Error = err.Error()
 			ds.Status = DownloadStatusError
 		})
+	} else {
+		d.updateState(func(ds *DownloadState) {
+			ds.Status = ds.Status.NonRunning()
+		})
 	}
 
 	// Set the "stopped" condition, notifying any waiters

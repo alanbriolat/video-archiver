@@ -142,7 +142,7 @@ func (m *downloadManager) onActionNew() {
 		v := ValidationResult{}
 		if d.URL == "" {
 			v.AddError("url", "URL must not be empty")
-		} else if err := validateURL(d.URL); err != nil {
+		} else if err := ValidateURL(d.URL); err != nil {
 			v.AddError("url", "Invalid URL: %v", err)
 		}
 		if d.CollectionID == database.NullRowID {
@@ -167,7 +167,7 @@ func (m *downloadManager) onActionEdit() {
 		v := ValidationResult{}
 		if d.URL == "" {
 			v.AddError("url", "URL must not be empty")
-		} else if err := validateURL(d.URL); err != nil {
+		} else if err := ValidateURL(d.URL); err != nil {
 			v.AddError("url", "Invalid URL: %v", err)
 		}
 		if d.CollectionID != m.current.CollectionID {
@@ -237,7 +237,7 @@ func (m *downloadManager) addDownloadURL(text string) error {
 		return fmt.Errorf("no URL provided")
 	} else if m.collection == nil {
 		return fmt.Errorf("no collection selected")
-	} else if err := validateURL(text); err != nil {
+	} else if err := ValidateURL(text); err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	} else {
 		m.MustAddItem(newDownloadFromDB(database.Download{CollectionID: m.collection.ID, URL: text}, m.collection))

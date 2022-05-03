@@ -137,6 +137,10 @@ func newDownload(session *Session, state DownloadState) (*Download, error) {
 	return d, nil
 }
 
+func (d *Download) ID() DownloadID {
+	return d.state.ID
+}
+
 func (d *Download) String() string {
 	return fmt.Sprintf("Download{ID:\"%s\"}", d.state.ID)
 }
