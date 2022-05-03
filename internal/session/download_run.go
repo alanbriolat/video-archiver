@@ -179,22 +179,25 @@ func (d *Download) runInBackground(ctx context.Context) error {
 	prefix := strings.TrimRight(savePath, string(os.PathSeparator)) + string(os.PathSeparator)
 	// Prevent stampede from a lot of downloads starting at the same time always updating at the same time
 	nextUpdate := time.Now().Add(time.Duration(rand.Int63n(int64(d.session.config.ProgressUpdateInterval))))
-	builder := video_archiver.NewDownloadBuilder().WithTargetPrefix(prefix).WithContext(ctx).WithProgressCallback(func(downloaded int, expected int) {
-		now := time.Now()
-		if now.Before(nextUpdate) {
-			return
-		}
-		nextUpdate = now.Add(d.session.config.ProgressUpdateInterval)
-		var progress int
-		if expected == 0 {
-			progress = 0
-		} else {
-			progress = (downloaded * 100) / expected
-		}
-		d.updateState(func(ds *DownloadState) {
-			ds.Progress = progress
+	builder := video_archiver.NewDownloadBuilder().
+		WithTargetPrefix(prefix).
+		WithContext(ctx).
+		WithProgressCallback(func(downloaded int, expected int) {
+			now := time.Now()
+			if now.Before(nextUpdate) {
+				return
+			}
+			nextUpdate = now.Add(d.session.config.ProgressUpdateInterval)
+			var progress int
+			if expected == 0 {
+				progress = 0
+			} else {
+				progress = (downloaded * 100) / expected
+			}
+			d.updateState(func(ds *DownloadState) {
+				ds.Progress = progress
+			})
 		})
-	})
 	d.updateState(func(ds *DownloadState) {
 		ds.Status = DownloadStatusDownloading
 	})

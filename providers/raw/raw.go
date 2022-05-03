@@ -91,6 +91,6 @@ func (s *source) Download(d video_archiver.Download) error {
 
 func init() {
 	video_archiver.DefaultProviderRegistry.MustAdd(
-		NewConfig().Provider().WithPriority(video_archiver.PriorityLowest),
+		NewConfig().Provider().WithPriority(video_archiver.PriorityLowest - 1),
 	)
 }
