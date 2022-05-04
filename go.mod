@@ -12,6 +12,7 @@ require (
 	github.com/schollz/progressbar/v3 v3.8.6
 	github.com/stretchr/testify v1.7.1
 	github.com/urfave/cli/v2 v2.4.0
+	go.etcd.io/bbolt v1.3.6
 	go.uber.org/zap v1.21.0
 	gorm.io/driver/sqlite v1.3.1
 	gorm.io/gorm v1.23.4

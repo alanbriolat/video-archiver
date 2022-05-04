@@ -45,10 +45,10 @@ func (s *Session) insertDownload(ds DownloadState) (*Download, error) {
 	})
 	if err != nil {
 		return nil, err
-	} else {
-		generic.Unwrap_(d.events.AddSubscriber(s.events, false))
-		s.log.Debugf("downloaded added: %v", d)
-		s.events.Send(DownloadAdded{downloadEvent{d}})
-		return d, err
 	}
+	generic.Unwrap_(d.session.config.Database.WriteDownload(&d.state.DownloadPersistentState))
+	generic.Unwrap_(d.events.AddSubscriber(s.events, false))
+	s.log.Debugf("downloaded added: %v", d)
+	s.events.Send(DownloadAdded{downloadEvent{d}})
+	return d, err
 }

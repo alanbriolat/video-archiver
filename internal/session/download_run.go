@@ -112,9 +112,10 @@ func (d *Download) updateState(f func(ds *DownloadState)) {
 		d.state.Progress = 100
 		d.complete.Set()
 	}
-	// TODO: persist changes to DownloadPersistentState
-	//d.session.db.SaveDownload(&d.DownloadPersistentState)
 	if d.state != old {
+		if d.state.DownloadPersistentState != old.DownloadPersistentState {
+			generic.Unwrap_(d.session.config.Database.WriteDownload(&d.state.DownloadPersistentState))
+		}
 		d.events.Send(DownloadUpdated{
 			downloadEvent: downloadEvent{d},
 			OldState:      old,

@@ -108,8 +108,8 @@ func Main() {
 	}()
 
 	env := generic.Unwrap(NewEnvBuilder().Context(ctx).Logger(logger).UserConfigDir(DefaultAppName).Build())
+	defer env.Close()
 	app := generic.Unwrap(NewApplication(env, DefaultAppID))
-
 	exitCode := app.Run()
 	os.Exit(exitCode)
 }

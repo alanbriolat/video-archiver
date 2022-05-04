@@ -8,12 +8,14 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/alanbriolat/video-archiver"
+	"github.com/alanbriolat/video-archiver/generic"
 	"github.com/alanbriolat/video-archiver/internal/pubsub"
 	"github.com/alanbriolat/video-archiver/internal/sync_"
 )
 
 type Config struct {
 	DefaultSavePath  string
+	Database         Database
 	ProviderRegistry *video_archiver.ProviderRegistry
 	// Minimum interval between DownloadUpdated events from progress updates.
 	ProgressUpdateInterval time.Duration
@@ -21,6 +23,7 @@ type Config struct {
 
 var DefaultConfig = Config{
 	DefaultSavePath:        ".",
+	Database:               NilDatabase{},
 	ProviderRegistry:       &video_archiver.DefaultProviderRegistry,
 	ProgressUpdateInterval: 500 * time.Millisecond,
 }
@@ -48,6 +51,15 @@ func New(config Config, ctx context.Context) (*Session, error) {
 		downloads: sync_.NewRWMutexed(make(downloadsByID)),
 	}
 	s.events = pubsub.NewPublisher[Event]()
+	// Asynchronously load existing downloads from the database; as long as client code does Subscribe before
+	// ListDownloads, there's no change that any downloads will be missed.
+	go func() {
+		for _, state := range generic.Unwrap(s.config.Database.ListDownloads()) {
+			ds := DownloadState{DownloadPersistentState: state}
+			// TDDO: eliminate the unnecessary write-back to the database this causes?
+			_ = generic.Unwrap(s.insertDownload(ds))
+		}
+	}()
 	return s, nil
 }
 
