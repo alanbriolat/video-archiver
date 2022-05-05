@@ -137,6 +137,7 @@
                     <property name="resizable">True</property>
                     <property name="title" translatable="yes">Name</property>
                     <property name="expand">True</property>
+                    <property name="sort_column_id">6</property>
                     <child>
                       <object class="GtkCellRendererText" id="download_cell_name"/>
                       <attributes>
@@ -148,6 +149,7 @@
                 <child>
                   <object class="GtkTreeViewColumn" id="download_column_status">
                     <property name="title" translatable="yes">Status</property>
+                    <property name="sort_column_id">4</property>
                     <child>
                       <object class="GtkCellRendererText" id="download_cell_status"/>
                       <attributes>
@@ -159,6 +161,7 @@
                 <child>
                   <object class="GtkTreeViewColumn" id="download_column_progress">
                     <property name="title" translatable="yes">Progress</property>
+                    <property name="sort_column_id">5</property>
                     <child>
                       <object class="GtkCellRendererProgress" id="download_cell_progress"/>
                       <attributes>
@@ -170,6 +173,7 @@
                 <child>
                   <object class="GtkTreeViewColumn" id="download_column_added">
                     <property name="title" translatable="yes">Added</property>
+                    <property name="sort_column_id">3</property>
                     <child>
                       <object class="GtkCellRendererText" id="download_cell_added"/>
                       <attributes>
@@ -181,6 +185,7 @@
                 <child>
                   <object class="GtkTreeViewColumn" id="download_column_savepath">
                     <property name="title" translatable="yes">Save Path</property>
+                    <property name="sort_column_id">2</property>
                     <child>
                       <object class="GtkCellRendererText" id="download_cell_savepath"/>
                       <attributes>

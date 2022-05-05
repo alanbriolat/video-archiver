@@ -59,6 +59,9 @@ func (m *downloadManager) onAppActivate(app Application) {
 
 	m.dlgNew = newDownloadNewDialog()
 
+	// TODO: save/restore the last selected sort column & direction used by the user
+	m.Store.SetSortColumnId(downloadColumnAdded, gtk.SORT_DESCENDING)
+
 	m.events = generic.Unwrap(m.app.Session().Subscribe())
 	go func() {
 		for event := range m.events.Receive() {
