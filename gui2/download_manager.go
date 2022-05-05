@@ -204,10 +204,16 @@ func (m *downloadManager) mustRemoveItem(d *session.Download) {
 }
 
 func (m *downloadManager) getSelectedDownloads() (downloads []*session.Download) {
-	// TODO: support multiple selection instead
-	if model, iter, ok := m.selection.GetSelected(); ok {
-		id := generic.Unwrap(generic.Unwrap(model.ToTreeModel().GetValue(iter, downloadColumnID)).GoValue()).(string)
-		downloads = append(downloads, m.items[session.DownloadID(id)])
+	rows := m.selection.GetSelectedRows(m.Store)
+	downloads = make([]*session.Download, 0, rows.Length())
+	for row := rows; row != nil; row = row.Next() {
+		path := row.Data().(*gtk.TreePath)
+		iter := generic.Unwrap(m.Store.GetIter(path))
+		value := generic.Unwrap(m.Store.GetValue(iter, downloadColumnID))
+		id := generic.Unwrap(value.GetString())
+		download := m.items[session.DownloadID(id)]
+		downloads = append(downloads, download)
+
 	}
 	return downloads
 }
