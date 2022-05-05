@@ -46,7 +46,22 @@
                 <property name="action_name">win.new_download</property>
                 <property name="label" translatable="yes">New</property>
                 <property name="use_underline">True</property>
-                <property name="stock_id">gtk-new</property>
+                <property name="stock_id">gtk-add</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="homogeneous">True</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkToolButton">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="tooltip_text" translatable="yes">Remove selecte download(s)</property>
+                <property name="action_name">win.remove_download</property>
+                <property name="label" translatable="yes">Remove</property>
+                <property name="use_underline">True</property>
+                <property name="stock_id">gtk-remove</property>
               </object>
               <packing>
                 <property name="expand">False</property>

@@ -25,6 +25,7 @@ type Application interface {
 
 	RegisterSimpleWindowAction(name string, parameterType *glib.VariantType, callback func()) *glib.SimpleAction
 	SetWindowActionAccels(name string, accels []string)
+	RunWarningDialog(format string, args ...interface{}) bool
 }
 
 type application struct {
@@ -91,6 +92,14 @@ func (a *application) RegisterSimpleWindowAction(name string, parameterType *gli
 
 func (a *application) SetWindowActionAccels(name string, accels []string) {
 	a.gtkApplication.SetAccelsForAction("win."+name, accels)
+}
+
+// RunWarningDialog will show a modal warning dialog with "OK" and "Cancel" buttons, returning true if "OK" was clicked.
+func (a *application) RunWarningDialog(format string, args ...interface{}) bool {
+	dlg := gtk.MessageDialogNew(a.Window, gtk.DIALOG_MODAL, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK_CANCEL, format, args...)
+	defer dlg.Destroy()
+	response := dlg.Run()
+	return response == gtk.RESPONSE_OK
 }
 
 func Main() {

@@ -52,3 +52,17 @@ func (s *Session) insertDownload(ds DownloadState) (*Download, error) {
 	s.events.Send(DownloadAdded{downloadEvent{d}})
 	return d, err
 }
+
+func (s *Session) RemoveDownload(id DownloadID) error {
+	return s.downloads.Locked(func(downloads downloadsByID) error {
+		if d, ok := downloads[id]; ok {
+			d.Close()
+			delete(downloads, id)
+			if err := d.session.config.Database.DeleteDownload(&d.state.DownloadPersistentState); err != nil {
+				return err
+			}
+			s.events.Send(DownloadRemoved{downloadEvent{d}})
+		}
+		return nil
+	})
+}

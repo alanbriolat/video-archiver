@@ -35,9 +35,10 @@ type downloadManager struct {
 	treeRefs  map[session.DownloadID]*gtk.TreeRowReference
 	selection *gtk.TreeSelection
 
-	actionNew   *glib.SimpleAction
-	actionStart *glib.SimpleAction
-	actionStop  *glib.SimpleAction
+	actionNew    *glib.SimpleAction
+	actionRemove *glib.SimpleAction
+	actionStart  *glib.SimpleAction
+	actionStop   *glib.SimpleAction
 
 	dlgNew *downloadNewDialog
 }
@@ -51,6 +52,8 @@ func (m *downloadManager) onAppActivate(app Application) {
 
 	m.actionNew = m.app.RegisterSimpleWindowAction("new_download", nil, m.onActionNew)
 	m.app.SetWindowActionAccels("new_download", []string{"<Primary>N"})
+	m.actionRemove = m.app.RegisterSimpleWindowAction("remove_download", nil, m.onActionRemove)
+	m.app.SetWindowActionAccels("remove_download", []string{"Delete"})
 	m.actionStart = m.app.RegisterSimpleWindowAction("start_download", nil, m.onActionStart)
 	m.actionStop = m.app.RegisterSimpleWindowAction("stop_download", nil, m.onActionStop)
 
@@ -79,6 +82,8 @@ func (m *downloadManager) onSessionEvent(event session.Event) {
 	switch e := event.(type) {
 	case session.DownloadAdded:
 		m.mustUpdateItem(e.Download(), nil)
+	case session.DownloadRemoved:
+		m.mustRemoveItem(e.Download())
 	case session.DownloadUpdated:
 		m.mustUpdateItem(e.Download(), &e.NewState)
 	default:
@@ -111,18 +116,29 @@ func (m *downloadManager) onActionNew() {
 	}
 }
 
+func (m *downloadManager) onActionRemove() {
+	m.forEachSelectedAsync(
+		func(downloads []*session.Download) bool {
+			return m.app.RunWarningDialog("Are you sure you want to delete %d download(s)?", len(downloads))
+		},
+		func(d *session.Download) {
+			generic.Unwrap_(m.app.Session().RemoveDownload(d.ID()))
+		},
+	)
+}
+
 func (m *downloadManager) onActionStart() {
-	for _, d := range m.getSelectedDownloads() {
+	m.forEachSelectedAsync(nil, func(d *session.Download) {
 		if !d.IsComplete() {
 			d.Start()
 		}
-	}
+	})
 }
 
 func (m *downloadManager) onActionStop() {
-	for _, d := range m.getSelectedDownloads() {
+	m.forEachSelectedAsync(nil, func(d *session.Download) {
 		d.Stop()
-	}
+	})
 }
 
 func (m *downloadManager) mustRefresh() {
@@ -194,6 +210,17 @@ func (m *downloadManager) getSelectedDownloads() (downloads []*session.Download)
 		downloads = append(downloads, m.items[session.DownloadID(id)])
 	}
 	return downloads
+}
+
+func (m *downloadManager) forEachSelectedAsync(confirm func(downloads []*session.Download) bool, act func(*session.Download)) {
+	downloads := m.getSelectedDownloads()
+	if confirm == nil || confirm(downloads) {
+		go func() {
+			for _, d := range downloads {
+				act(d)
+			}
+		}()
+	}
 }
 
 func (m *downloadManager) selectionDisabled(f func()) {
