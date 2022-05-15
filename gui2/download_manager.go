@@ -2,9 +2,11 @@ package gui2
 
 import (
 	"html"
+	"os/exec"
 	"strings"
 	"text/template"
 
+	"github.com/gotk3/gotk3/gdk"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 
@@ -29,16 +31,21 @@ type downloadManager struct {
 	app    Application
 	events pubsub.ReceiverCloser[session.Event]
 
-	Store     *gtk.ListStore `glade:"store"`
-	View      *gtk.TreeView  `glade:"tree"`
+	Store       *gtk.ListStore `glade:"store"`
+	View        *gtk.TreeView  `glade:"tree"`
+	ContextMenu *gtk.Menu      `glade:"context_menu"`
+
 	items     map[session.DownloadID]*session.Download
 	treeRefs  map[session.DownloadID]*gtk.TreeRowReference
 	selection *gtk.TreeSelection
 
-	actionNew    *glib.SimpleAction
-	actionRemove *glib.SimpleAction
-	actionStart  *glib.SimpleAction
-	actionStop   *glib.SimpleAction
+	actionNew      *glib.SimpleAction
+	actionRemove   *glib.SimpleAction
+	actionStart    *glib.SimpleAction
+	actionStop     *glib.SimpleAction
+	contextActions *glib.SimpleActionGroup
+	actionCopyURL  *glib.SimpleAction
+	actionOpenPath *glib.SimpleAction
 
 	dlgNew *downloadNewDialog
 }
@@ -57,7 +64,23 @@ func (m *downloadManager) onAppActivate(app Application) {
 	m.actionStart = m.app.RegisterSimpleWindowAction("start_download", nil, m.onActionStart)
 	m.actionStop = m.app.RegisterSimpleWindowAction("stop_download", nil, m.onActionStop)
 
+	m.contextActions = glib.SimpleActionGroupNew()
+	m.actionCopyURL = glib.SimpleActionNew("copy_url", nil)
+	m.actionCopyURL.Connect("activate", m.onActionCopyURL)
+	m.contextActions.AddAction(m.actionCopyURL)
+	m.actionOpenPath = glib.SimpleActionNew("open_path", nil)
+	m.actionOpenPath.Connect("activate", m.onActionOpenPath)
+	m.contextActions.AddAction(m.actionOpenPath)
+	m.ContextMenu.InsertActionGroup("popup", m.contextActions)
+
 	m.dlgNew = newDownloadNewDialog()
+
+	m.View.Connect("button-press-event", func(treeView *gtk.TreeView, event *gdk.Event) {
+		eventButton := gdk.EventButtonNewFromEvent(event)
+		if eventButton.Type() == gdk.EVENT_BUTTON_PRESS && eventButton.Button() == gdk.BUTTON_SECONDARY {
+			m.ContextMenu.PopupAtPointer(event)
+		}
+	})
 
 	// TODO: save/restore the last selected sort column & direction used by the user
 	m.Store.SetSortColumnId(downloadColumnAdded, gtk.SORT_DESCENDING)
@@ -142,6 +165,26 @@ func (m *downloadManager) onActionStop() {
 	m.forEachSelectedAsync(nil, func(d *session.Download) {
 		d.Stop()
 	})
+}
+
+func (m *downloadManager) onActionCopyURL() {
+	downloads := m.getSelectedDownloads()
+	if len(downloads) == 1 {
+		download := downloads[0]
+		state := generic.Unwrap(download.State())
+		clipboard := generic.Unwrap(gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD))
+		clipboard.SetText(state.URL)
+	}
+}
+
+func (m *downloadManager) onActionOpenPath() {
+	downloads := m.getSelectedDownloads()
+	if len(downloads) == 1 {
+		download := downloads[0]
+		state := generic.Unwrap(download.State())
+		// TODO: Windows support
+		generic.Unwrap_(exec.Command("xdg-open", state.SavePath).Run())
+	}
 }
 
 func (m *downloadManager) mustRefresh() {
