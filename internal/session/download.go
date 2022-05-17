@@ -89,9 +89,19 @@ type DownloadState struct {
 	DownloadEphemeralState
 }
 
+type downloadStage uint8
+
+const (
+	downloadStageUndefined  downloadStage = 0
+	downloadStageMatched    downloadStage = 1
+	downloadStageResolved   downloadStage = 2
+	downloadStageDownloaded downloadStage = 3
+)
+
 type Download struct {
-	state DownloadState
-	mu    sync.RWMutex
+	state       DownloadState
+	targetStage downloadStage
+	mu          sync.RWMutex
 
 	session   *Session
 	ctx       context.Context
@@ -103,7 +113,7 @@ type Download struct {
 	stopped      sync_.Event
 	complete     sync_.Event
 	done         chan struct{}
-	startCommand chan struct{}
+	startCommand chan downloadStage
 	stopCommand  chan struct{}
 	stateCommand chan chan generic.Result[DownloadState]
 
@@ -125,7 +135,7 @@ func newDownload(session *Session, state DownloadState) (*Download, error) {
 		events: pubsub.NewPublisher[Event](),
 
 		done:         make(chan struct{}),
-		startCommand: make(chan struct{}),
+		startCommand: make(chan downloadStage),
 		stopCommand:  make(chan struct{}),
 		stateCommand: make(chan chan generic.Result[DownloadState]),
 

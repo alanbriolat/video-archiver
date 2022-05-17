@@ -109,6 +109,7 @@ func (m *downloadManager) onSessionEvent(event session.Event) {
 	switch e := event.(type) {
 	case session.DownloadAdded:
 		m.mustUpdateItem(e.Download(), nil)
+		e.Download().Recon()
 	case session.DownloadRemoved:
 		m.mustRemoveItem(e.Download())
 	case session.DownloadUpdated:

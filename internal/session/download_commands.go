@@ -26,7 +26,14 @@ func (d *Download) State() (DownloadState, error) {
 
 func (d *Download) Start() {
 	select {
-	case d.startCommand <- struct{}{}:
+	case d.startCommand <- downloadStageDownloaded:
+	case <-d.ctx.Done():
+	}
+}
+
+func (d *Download) Recon() {
+	select {
+	case d.startCommand <- downloadStageResolved:
 	case <-d.ctx.Done():
 	}
 }

@@ -28,8 +28,8 @@ func (d *Download) run() {
 			case <-d.ctx.Done():
 			}
 		// Download.Start()
-		case <-d.startCommand:
-			d.start()
+		case stage := <-d.startCommand:
+			d.start(stage)
 		// Download.Stop()
 		case <-d.stopCommand:
 			d.stop(nil)
@@ -45,7 +45,8 @@ func (d *Download) close() {
 	d.events.Close()
 }
 
-func (d *Download) start() {
+func (d *Download) start(stage downloadStage) {
+	d.setTargetStage(stage)
 	if !d.stopped.Clear() {
 		// Already running (or being started) so nothing to do
 		return
@@ -68,6 +69,7 @@ func (d *Download) start() {
 }
 
 func (d *Download) stop(err error) {
+	d.setTargetStage(downloadStageUndefined)
 	if !d.running.Clear() {
 		// Not running (or already stopping) so nothing to do
 		return
@@ -124,6 +126,18 @@ func (d *Download) updateState(f func(ds *DownloadState)) {
 	}
 }
 
+func (d *Download) setTargetStage(stage downloadStage) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.targetStage = stage
+}
+
+func (d *Download) shouldRunStage(stage downloadStage) bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return stage <= d.targetStage
+}
+
 func (d *Download) runInBackground(ctx context.Context) error {
 	logger := d.log()
 
@@ -138,6 +152,9 @@ func (d *Download) runInBackground(ctx context.Context) error {
 		ds.Error = ""
 	})
 
+	if !d.shouldRunStage(downloadStageMatched) {
+		return nil
+	}
 	d.updateState(func(ds *DownloadState) {
 		ds.Status = DownloadStatusMatching
 	})
@@ -161,6 +178,9 @@ func (d *Download) runInBackground(ctx context.Context) error {
 		return err
 	}
 
+	if !d.shouldRunStage(downloadStageResolved) {
+		return nil
+	}
 	d.updateState(func(ds *DownloadState) {
 		ds.Status = DownloadStatusFetching
 	})
@@ -177,6 +197,9 @@ func (d *Download) runInBackground(ctx context.Context) error {
 		return err
 	}
 
+	if !d.shouldRunStage(downloadStageDownloaded) {
+		return nil
+	}
 	prefix := strings.TrimRight(savePath, string(os.PathSeparator)) + string(os.PathSeparator)
 	// Prevent stampede from a lot of downloads starting at the same time always updating at the same time
 	nextUpdate := time.Now().Add(time.Duration(rand.Int63n(int64(d.session.config.ProgressUpdateInterval))))

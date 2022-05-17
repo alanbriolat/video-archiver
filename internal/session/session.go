@@ -56,7 +56,7 @@ func New(config Config, ctx context.Context) (*Session, error) {
 	go func() {
 		for _, state := range generic.Unwrap(s.config.Database.ListDownloads()) {
 			ds := DownloadState{DownloadPersistentState: state}
-			// TDDO: eliminate the unnecessary write-back to the database this causes?
+			// TODO: eliminate the unnecessary write-back to the database this causes?
 			_ = generic.Unwrap(s.insertDownload(ds))
 		}
 	}()
