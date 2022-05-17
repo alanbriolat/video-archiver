@@ -1,4 +1,4 @@
-package gui2
+package gui
 
 import (
 	"github.com/gotk3/gotk3/gtk"

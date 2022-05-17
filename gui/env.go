@@ -10,30 +10,30 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/alanbriolat/video-archiver"
-	"github.com/alanbriolat/video-archiver/database"
+	"github.com/alanbriolat/video-archiver/internal/boltdb"
+	"github.com/alanbriolat/video-archiver/internal/session"
 )
 
 type Env interface {
 	Context() context.Context
-	DB() *database.Database
 	Logger() *zap.Logger
 	ProviderRegistry() *video_archiver.ProviderRegistry
+	DB() boltdb.Database
+	Session() *session.Session
+	Close()
 }
 
 type env struct {
 	configDir        string
 	ctx              context.Context
-	db               *database.Database
 	log              *zap.Logger
 	providerRegistry *video_archiver.ProviderRegistry
+	db               boltdb.Database
+	session          *session.Session
 }
 
 func (e *env) Context() context.Context {
 	return e.ctx
-}
-
-func (e *env) DB() *database.Database {
-	return e.db
 }
 
 func (e *env) Logger() *zap.Logger {
@@ -42,6 +42,21 @@ func (e *env) Logger() *zap.Logger {
 
 func (e *env) ProviderRegistry() *video_archiver.ProviderRegistry {
 	return e.providerRegistry
+}
+
+func (e *env) DB() boltdb.Database {
+	return e.db
+}
+
+func (e *env) Session() *session.Session {
+	return e.session
+}
+
+func (e *env) Close() {
+	e.session.Close()
+	if err := e.db.Close(); err != nil {
+		e.log.Sugar().Errorf("error closing database: %v", err)
+	}
 }
 
 type EnvBuilder interface {
@@ -53,10 +68,8 @@ type EnvBuilder interface {
 	// UserConfigDir will use the specified application to generate a configuration path, according to the platform's
 	// default user application data path, e.g. ~/.config/{{appName}}.
 	UserConfigDir(appName string) EnvBuilder
-	// Database specifies an existing database object to use.
-	Database(db *database.Database) EnvBuilder
-	// DatabaseFilename will use the specified filename within the configuration path as the database path
-	// (see also ConfigDir and UserConfigDir).
+	// DatabaseFilename will use the specified filename within the configuration path as the database path (see also
+	// ConfigDir and UserConfigDir).
 	DatabaseFilename(filename string) EnvBuilder
 	// DatabasePath specifies an exact path to the database file.
 	DatabasePath(path string) EnvBuilder
@@ -76,7 +89,7 @@ func NewEnvBuilder() EnvBuilder {
 			providerRegistry: &video_archiver.DefaultProviderRegistry,
 		},
 	}
-	b.DatabaseFilename("database.sqlite3")
+	b.DatabaseFilename("session.db")
 	return b
 }
 
@@ -93,18 +106,19 @@ func (b *envBuilder) Build() (_ Env, err error) {
 	if err = os.MkdirAll(env.configDir, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create config dir %v: %w", env.configDir, err)
 	}
-	if env.db == nil {
-		dbPath := b.makeDatabasePath(b)
-		if err = os.MkdirAll(filepath.Dir(dbPath), 0750); err != nil {
-			return nil, fmt.Errorf("failed to create database %v: %w", dbPath, err)
-		}
-		if env.db, err = database.NewDatabase(dbPath, env.log); err != nil {
-			return nil, fmt.Errorf("failed to create database: %w", err)
-		}
+
+	dbPath := b.makeDatabasePath(b)
+	if err = os.MkdirAll(filepath.Dir(dbPath), 0750); err != nil {
+		return nil, fmt.Errorf("failed to create database %v: %w", dbPath, err)
+	} else if env.db, err = boltdb.New(dbPath); err != nil {
+		return nil, fmt.Errorf("failed to create database %v: %w", dbPath, err)
 	}
-	// TODO: should Migrate() be left to the consumer of the Env?
-	if err = env.db.Migrate(); err != nil {
-		return nil, fmt.Errorf("failed to migrate database: %w", err)
+
+	sessionConfig := session.DefaultConfig
+	sessionConfig.Database = env.db
+	sessionConfig.ProviderRegistry = env.providerRegistry
+	if env.session, err = session.New(sessionConfig, env.ctx); err != nil {
+		return nil, err
 	}
 
 	return &env, nil
@@ -132,20 +146,12 @@ func (b *envBuilder) UserConfigDir(appName string) EnvBuilder {
 	return b
 }
 
-func (b *envBuilder) Database(db *database.Database) EnvBuilder {
-	b.db = db
-	b.makeDatabasePath = nil
-	return b
-}
-
 func (b *envBuilder) DatabaseFilename(filename string) EnvBuilder {
-	b.db = nil
 	b.makeDatabasePath = func(b *envBuilder) string { return filepath.Join(b.makeConfigDir(b), filename) }
 	return b
 }
 
 func (b *envBuilder) DatabasePath(path string) EnvBuilder {
-	b.db = nil
 	b.makeDatabasePath = func(_ *envBuilder) string { return path }
 	return b
 }
