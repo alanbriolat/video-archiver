@@ -1,8 +1,10 @@
 package gui
 
 import (
+	"fmt"
 	"html"
 	"os/exec"
+	"runtime"
 	"strings"
 	"text/template"
 
@@ -181,8 +183,21 @@ func (m *downloadManager) onActionOpenPath() {
 	if len(downloads) == 1 {
 		download := downloads[0]
 		state := generic.Unwrap(download.State())
-		// TODO: Windows support
-		generic.Unwrap_(exec.Command("xdg-open", state.SavePath).Run())
+		var err error
+		switch runtime.GOOS {
+		case "linux":
+			err = exec.Command("xdg-open", state.SavePath).Start()
+		case "windows":
+			err = exec.Command("rundll32", "url.dll,FileProtocolHandler", state.SavePath).Start()
+		case "darwin":
+			// Untested
+			err = exec.Command("open", state.SavePath).Start()
+		default:
+			err = fmt.Errorf("don't know howo to open folder on platform %v", runtime.GOOS)
+		}
+		if err != nil {
+			m.app.Logger().Sugar().Errorf("failed to open save path: %v", err)
+		}
 	}
 }
 
