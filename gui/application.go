@@ -7,8 +7,9 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/gotk3/gotk3/glib"
-	"github.com/gotk3/gotk3/gtk"
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
+	"github.com/diamondburned/gotk4/pkg/gtk/v3"
 	"go.uber.org/zap"
 
 	"github.com/alanbriolat/video-archiver/generic"
@@ -23,7 +24,7 @@ type Application interface {
 
 	Run(args ...string) int
 
-	RegisterSimpleWindowAction(name string, parameterType *glib.VariantType, callback func()) *glib.SimpleAction
+	RegisterSimpleWindowAction(name string, parameterType *glib.VariantType, callback func()) *gio.SimpleAction
 	SetWindowActionAccels(name string, accels []string)
 	RunWarningDialog(format string, args ...interface{}) bool
 }
@@ -43,8 +44,8 @@ func NewApplication(env Env, appID string) (_ Application, err error) {
 		Env: env,
 	}
 
-	if a.gtkApplication, err = gtk.ApplicationNew(appID, glib.APPLICATION_FLAGS_NONE); err != nil {
-		return nil, fmt.Errorf("failed to create GTK application: %w", err)
+	if a.gtkApplication = gtk.NewApplication(appID, gio.ApplicationFlagsNone); a.gtkApplication == nil {
+		return nil, fmt.Errorf("failed to create GTK application")
 	}
 	a.gtkApplication.Connect("startup", a.onStartup)
 	a.gtkApplication.Connect("activate", a.onActivate)
@@ -83,8 +84,8 @@ func (a *application) onShutdown() {
 	a.Downloads.onAppShutdown()
 }
 
-func (a *application) RegisterSimpleWindowAction(name string, parameterType *glib.VariantType, callback func()) *glib.SimpleAction {
-	action := glib.SimpleActionNew(name, parameterType)
+func (a *application) RegisterSimpleWindowAction(name string, parameterType *glib.VariantType, callback func()) *gio.SimpleAction {
+	action := gio.NewSimpleAction(name, parameterType)
 	action.Connect("activate", callback)
 	a.Window.AddAction(action)
 	return action
@@ -96,10 +97,11 @@ func (a *application) SetWindowActionAccels(name string, accels []string) {
 
 // RunWarningDialog will show a modal warning dialog with "OK" and "Cancel" buttons, returning true if "OK" was clicked.
 func (a *application) RunWarningDialog(format string, args ...interface{}) bool {
-	dlg := gtk.MessageDialogNew(a.Window, gtk.DIALOG_MODAL, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK_CANCEL, format, args...)
+	dlg := gtk.NewMessageDialog(&a.Window.Window, gtk.DialogModal, gtk.MessageWarning, gtk.ButtonsOKCancel)
+	dlg.SetMarkup(fmt.Sprintf(format, args...))
 	defer dlg.Destroy()
 	response := dlg.Run()
-	return response == gtk.RESPONSE_OK
+	return response == int(gtk.ResponseOK)
 }
 
 func Main() {

@@ -3,9 +3,9 @@ module github.com/alanbriolat/video-archiver
 go 1.18
 
 require (
+	github.com/diamondburned/gotk4/pkg v0.0.0-20220511012550-9c3f1b24ce9c
 	github.com/golang-migrate/migrate/v4 v4.15.1
 	github.com/google/uuid v1.3.0
-	github.com/gotk3/gotk3 v0.6.1
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/kkdai/youtube/v2 v2.7.10
 	github.com/r3labs/diff/v3 v3.0.0
@@ -39,8 +39,10 @@ require (
 	github.com/vmihailenco/msgpack v4.0.4+incompatible // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
+	go4.org/unsafe/assume-no-moving-gc v0.0.0-20211027215541-db492cf91b37 // indirect
 	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd // indirect
 	golang.org/x/net v0.0.0-20211215060638-4ddde0e984e9 // indirect
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/sys v0.0.0-20220317061510-51cd9980dadf // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect

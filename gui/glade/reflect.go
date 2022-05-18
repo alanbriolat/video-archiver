@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/gotk3/gotk3/glib"
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
 )
 
 type FieldError struct {
@@ -82,4 +82,4 @@ func reflectFieldsOf[T any]() ([]field, error) {
 	return reflectFields(reflect.TypeOf((*T)(nil)).Elem(), nil, "")
 }
 
-var gobjectType = reflect.TypeOf((*glib.IObject)(nil)).Elem()
+var gobjectType = reflect.TypeOf((*glib.Objector)(nil)).Elem()

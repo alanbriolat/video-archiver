@@ -1,9 +1,9 @@
 package glade
 
 import (
-	"github.com/gotk3/gotk3/gtk"
 	"testing"
 
+	"github.com/diamondburned/gotk4/pkg/gtk/v3"
 	assert_ "github.com/stretchr/testify/assert"
 
 	"github.com/alanbriolat/video-archiver/generic"

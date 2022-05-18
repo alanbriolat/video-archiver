@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/gotk3/gotk3/gtk"
+	"github.com/diamondburned/gotk4/pkg/gtk/v3"
 
 	"github.com/alanbriolat/video-archiver/generic"
 )
@@ -58,11 +58,8 @@ type builder struct {
 }
 
 func NewBuilder(data []byte) (Builder, error) {
-	if gtkBuilder, err := gtk.BuilderNewFromString(string(data)); err != nil {
-		return nil, err
-	} else {
-		return &builder{gtkBuilder}, nil
-	}
+	gtkBuilder := gtk.NewBuilderFromString(string(data), len(data))
+	return &builder{gtkBuilder}, nil
 }
 
 func (b *builder) ToGTK() *gtk.Builder {
@@ -76,10 +73,10 @@ func (b *builder) Build(v interface{}) error {
 	} else {
 		for _, f := range fields {
 			vf := reflected.FieldByIndex(f.FullIndex)
-			if o, err := b.gtkBuilder.GetObject(f.GladeName); err != nil {
-				return err
+			if o := b.gtkBuilder.GetObject(f.GladeName); o == nil {
+				return fmt.Errorf("could not get object %v from builder", f.GladeName)
 			} else {
-				vf.Set(reflect.ValueOf(o))
+				vf.Set(reflect.ValueOf(o.Cast()))
 			}
 		}
 	}

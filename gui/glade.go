@@ -3,7 +3,7 @@ package gui
 import (
 	"embed"
 
-	"github.com/alanbriolat/video-archiver/glade"
+	"github.com/alanbriolat/video-archiver/gui/glade"
 )
 
 //go:embed *.glade

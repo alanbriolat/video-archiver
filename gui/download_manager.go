@@ -8,9 +8,10 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/gotk3/gotk3/gdk"
-	"github.com/gotk3/gotk3/glib"
-	"github.com/gotk3/gotk3/gtk"
+	"github.com/diamondburned/gotk4/pkg/gdk/v3"
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
+	"github.com/diamondburned/gotk4/pkg/gtk/v3"
 
 	"github.com/alanbriolat/video-archiver/generic"
 	"github.com/alanbriolat/video-archiver/internal/pubsub"
@@ -40,13 +41,13 @@ type downloadManager struct {
 	treeRefs  map[session.DownloadID]*gtk.TreeRowReference
 	selection *gtk.TreeSelection
 
-	actionNew      *glib.SimpleAction
-	actionRemove   *glib.SimpleAction
-	actionStart    *glib.SimpleAction
-	actionStop     *glib.SimpleAction
-	contextActions *glib.SimpleActionGroup
-	actionCopyURL  *glib.SimpleAction
-	actionOpenPath *glib.SimpleAction
+	actionNew      *gio.SimpleAction
+	actionRemove   *gio.SimpleAction
+	actionStart    *gio.SimpleAction
+	actionStop     *gio.SimpleAction
+	contextActions *gio.SimpleActionGroup
+	actionCopyURL  *gio.SimpleAction
+	actionOpenPath *gio.SimpleAction
 
 	dlgNew *downloadNewDialog
 }
@@ -56,7 +57,7 @@ func (m *downloadManager) onAppActivate(app Application) {
 
 	m.items = make(map[session.DownloadID]*session.Download)
 	m.treeRefs = make(map[session.DownloadID]*gtk.TreeRowReference)
-	m.selection = generic.Unwrap(m.View.GetSelection())
+	m.selection = m.View.Selection()
 
 	m.actionNew = m.app.RegisterSimpleWindowAction("new_download", nil, m.onActionNew)
 	m.app.SetWindowActionAccels("new_download", []string{"<Primary>N"})
@@ -65,11 +66,11 @@ func (m *downloadManager) onAppActivate(app Application) {
 	m.actionStart = m.app.RegisterSimpleWindowAction("start_download", nil, m.onActionStart)
 	m.actionStop = m.app.RegisterSimpleWindowAction("stop_download", nil, m.onActionStop)
 
-	m.contextActions = glib.SimpleActionGroupNew()
-	m.actionCopyURL = glib.SimpleActionNew("copy_url", nil)
+	m.contextActions = gio.NewSimpleActionGroup()
+	m.actionCopyURL = gio.NewSimpleAction("copy_url", nil)
 	m.actionCopyURL.Connect("activate", m.onActionCopyURL)
 	m.contextActions.AddAction(m.actionCopyURL)
-	m.actionOpenPath = glib.SimpleActionNew("open_path", nil)
+	m.actionOpenPath = gio.NewSimpleAction("open_path", nil)
 	m.actionOpenPath.Connect("activate", m.onActionOpenPath)
 	m.contextActions.AddAction(m.actionOpenPath)
 	m.ContextMenu.InsertActionGroup("popup", m.contextActions)
@@ -77,14 +78,17 @@ func (m *downloadManager) onAppActivate(app Application) {
 	m.dlgNew = newDownloadNewDialog()
 
 	m.View.Connect("button-press-event", func(treeView *gtk.TreeView, event *gdk.Event) {
-		eventButton := gdk.EventButtonNewFromEvent(event)
-		if eventButton.Type() == gdk.EVENT_BUTTON_PRESS && eventButton.Button() == gdk.BUTTON_SECONDARY {
+		eventButton := event.AsButton()
+		if eventButton == nil {
+			panic("expected EventButton")
+		}
+		if eventButton.Type() == gdk.ButtonPressType && eventButton.Button() == gdk.BUTTON_SECONDARY {
 			m.ContextMenu.PopupAtPointer(event)
 		}
 	})
 
 	// TODO: save/restore the last selected sort column & direction used by the user
-	m.Store.SetSortColumnId(downloadColumnAdded, gtk.SORT_DESCENDING)
+	m.Store.SetSortColumnID(downloadColumnAdded, gtk.SortDescending)
 
 	m.events = generic.Unwrap(m.app.Session().Subscribe())
 	go func() {
@@ -174,8 +178,8 @@ func (m *downloadManager) onActionCopyURL() {
 	if len(downloads) == 1 {
 		download := downloads[0]
 		state := generic.Unwrap(download.State())
-		clipboard := generic.Unwrap(gtk.ClipboardGet(gdk.SELECTION_CLIPBOARD))
-		clipboard.SetText(state.URL)
+		clipboard := gtk.ClipboardGetDefault(gdk.DisplayGetDefault())
+		clipboard.SetText(state.URL, len(state.URL))
 	}
 }
 
@@ -218,13 +222,16 @@ func (m *downloadManager) mustUpdateItem(d *session.Download, ds *session.Downlo
 	if treeRef, ok := m.treeRefs[id]; !ok {
 		// If this is a new download, add it
 		iter = m.Store.Append()
-		treePath := generic.Unwrap(m.Store.GetPath(iter))
-		treeRef = generic.Unwrap(gtk.TreeRowReferenceNew(m.Store.ToTreeModel(), treePath))
+		treePath := m.Store.Path(iter)
+		treeRef := gtk.NewTreeRowReference(m.Store, treePath)
 		m.items[id] = d
 		m.treeRefs[id] = treeRef
 	} else {
 		// Otherwise just get the iter for the row in the TreeView
-		iter = generic.Unwrap(m.Store.GetIter(treeRef.GetPath()))
+		iter, ok = m.Store.Iter(treeRef.Path())
+		if !ok {
+			panic("invalid TreePath in mustUpdateItem")
+		}
 	}
 	columns := []int{
 		downloadColumnID,
@@ -236,23 +243,26 @@ func (m *downloadManager) mustUpdateItem(d *session.Download, ds *session.Downlo
 		downloadColumnName,
 		downloadColumnTooltip,
 	}
-	values := []interface{}{
-		string(ds.ID),
-		ds.URL,
-		ds.SavePath,
-		ds.AddedAt.Local().Format("2006-01-02 15:04:05"),
-		string(ds.Status),
-		getDownloadStateDisplayProgress(ds),
-		getDownloadStateDisplayName(ds),
-		html.EscapeString(getDownloadStateDisplayTooltip(ds)),
+	values := []glib.Value{
+		*glib.NewValue(ds.ID),
+		*glib.NewValue(ds.URL),
+		*glib.NewValue(ds.SavePath),
+		*glib.NewValue(ds.AddedAt.Local().Format("2006-01-02 15:04:05")),
+		*glib.NewValue(ds.Status),
+		*glib.NewValue(getDownloadStateDisplayProgress(ds)),
+		*glib.NewValue(getDownloadStateDisplayName(ds)),
+		*glib.NewValue(html.EscapeString(getDownloadStateDisplayTooltip(ds))),
 	}
-	generic.Unwrap_(m.Store.Set(iter, columns, values))
+	m.Store.Set(iter, columns, values)
 }
 
 func (m *downloadManager) mustRemoveItem(d *session.Download) {
 	id := d.ID()
 	if treeRef, ok := m.treeRefs[id]; ok {
-		iter := generic.Unwrap(m.Store.GetIter(treeRef.GetPath()))
+		iter, ok := m.Store.Iter(treeRef.Path())
+		if !ok {
+			panic("invalid TreePath in mustRemoveItem")
+		}
 		m.selection.UnselectIter(iter)
 		m.selectionDisabled(func() {
 			m.Store.Remove(iter)
@@ -265,13 +275,15 @@ func (m *downloadManager) mustRemoveItem(d *session.Download) {
 }
 
 func (m *downloadManager) getSelectedDownloads() (downloads []*session.Download) {
-	rows := m.selection.GetSelectedRows(m.Store)
-	downloads = make([]*session.Download, 0, rows.Length())
-	for row := rows; row != nil; row = row.Next() {
-		path := row.Data().(*gtk.TreePath)
-		iter := generic.Unwrap(m.Store.GetIter(path))
-		value := generic.Unwrap(m.Store.GetValue(iter, downloadColumnID))
-		id := generic.Unwrap(value.GetString())
+	model, rows := m.selection.SelectedRows()
+	downloads = make([]*session.Download, 0, len(rows))
+	for _, path := range rows {
+		iter, ok := model.Iter(path)
+		if !ok {
+			panic("invalid TreePath in getSelectedDownloads")
+		}
+		value := model.Value(iter, downloadColumnID)
+		id := value.String()
 		download := m.items[session.DownloadID(id)]
 		downloads = append(downloads, download)
 
@@ -291,8 +303,8 @@ func (m *downloadManager) forEachSelectedAsync(confirm func(downloads []*session
 }
 
 func (m *downloadManager) selectionDisabled(f func()) {
-	mode := m.selection.GetMode()
-	m.selection.SetMode(gtk.SELECTION_NONE)
+	mode := m.selection.Mode()
+	m.selection.SetMode(gtk.SelectionNone)
 	defer m.selection.SetMode(mode)
 	f()
 }
