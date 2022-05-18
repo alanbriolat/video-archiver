@@ -1,0 +1,3 @@
+[submodule "deps/gotk3"]
+	path = deps/gotk3
+	url = git@github.com:alanbriolat/gotk3.git
