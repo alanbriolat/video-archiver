@@ -31,6 +31,15 @@ type Download interface {
 	// Progress returns the downloaded and expected bytes of the download.
 	Progress() (int, int)
 
+	// AppendHTTPRequest will execute the http.Request with Context() and then download the resulting stream like AppendStream.
+	AppendHTTPRequest(w io.Writer, req *http.Request) error
+
+	// AppendStream will download the stream to the writer, calling AddDownloadedBytes as necessary.
+	AppendStream(w io.Writer, stream io.Reader) error
+
+	// AppendURL will make a GET request to the URL and then download the resulting stream like AppendStream.
+	AppendURL(w io.Writer, url string) error
+
 	// SaveHTTPRequest will execute the http.Request with Context() and then download the resulting stream like SaveStream.
 	SaveHTTPRequest(filename string, req *http.Request) error
 
@@ -100,7 +109,7 @@ func (d *download) Progress() (int, int) {
 	return d.downloadedBytes, d.expectedBytes
 }
 
-func (d *download) SaveHTTPRequest(filename string, req *http.Request) error {
+func (d *download) AppendHTTPRequest(w io.Writer, req *http.Request) error {
 	if req == nil {
 		return fmt.Errorf("nil request")
 	}
@@ -115,7 +124,33 @@ func (d *download) SaveHTTPRequest(filename string, req *http.Request) error {
 	}
 	defer resp.Body.Close()
 	d.AddExpectedBytes(int(resp.ContentLength))
-	return d.SaveStream(filename, resp.Body)
+	return d.AppendStream(w, resp.Body)
+}
+
+func (d *download) AppendStream(w io.Writer, stream io.Reader) error {
+	r := &readerContext{ctx: d.ctx, r: stream}
+	_, err := io.Copy(io.MultiWriter(w, d), r)
+	if err != nil {
+		return fmt.Errorf("failed to write stream: %w", err)
+	}
+	return nil
+}
+
+func (d *download) AppendURL(w io.Writer, url string) error {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	return d.AppendHTTPRequest(w, req)
+}
+
+func (d *download) SaveHTTPRequest(filename string, req *http.Request) error {
+	f, err := d.CreateFile(filename)
+	if err != nil {
+		return fmt.Errorf("failed to open target file: %w", err)
+	}
+	defer f.Close()
+	return d.AppendHTTPRequest(f, req)
 }
 
 func (d *download) SaveStream(filename string, stream io.Reader) error {
@@ -124,21 +159,16 @@ func (d *download) SaveStream(filename string, stream io.Reader) error {
 		return fmt.Errorf("failed to open target file: %w", err)
 	}
 	defer f.Close()
-
-	r := &readerContext{ctx: d.ctx, r: stream}
-	_, err = io.Copy(io.MultiWriter(f, d), r)
-	if err != nil {
-		return fmt.Errorf("failed to save stream: %w", err)
-	}
-	return nil
+	return d.AppendStream(f, stream)
 }
 
 func (d *download) SaveURL(filename string, url string) error {
-	req, err := http.NewRequest("GET", url, nil)
+	f, err := d.CreateFile(filename)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to open target file: %w", err)
 	}
-	return d.SaveHTTPRequest(filename, req)
+	defer f.Close()
+	return d.AppendURL(f, url)
 }
 
 //func (d *download) TempSaveStream(pattern string, stream io.Reader) (string, error) {
